@@ -1,0 +1,19 @@
+%% Audit bounded context — schema: audit
+%% Append-only: the application DB role gets INSERT-only on this schema (backlog: T-AUD-1).
+%% prev_hash/entry_hash hash-chaining for tamper evidence is a target-design column set (backlog: T-AUD-2).
+erDiagram
+    AUDIT_EVENTS {
+        uuid id PK
+        uuid actor_id "JWT sub; Guid.Empty = system/anonymous"
+        varchar action "MediatR command name"
+        varchar entity_type "nullable; e.g. Account"
+        uuid entity_id "nullable"
+        timestamptz timestamp
+        varchar ip_address "nullable"
+        jsonb request_snapshot "nullable; before/input state"
+        jsonb response_snapshot "nullable; after/output state"
+        boolean succeeded
+        text error_message "nullable"
+        text prev_hash "target: hash of previous row (chain)"
+        text entry_hash "target: SHA-256 of row + prev_hash"
+    }

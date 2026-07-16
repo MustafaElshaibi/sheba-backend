@@ -1,0 +1,21 @@
+{
+  "name": "sheba-backend",
+  "version": "1.0.0",
+  "description": "Sheba (سبأ) is a national digital-government backend: one **modular monolith** that is both the country's **OpenID Connect / OAuth 2.1 Identity Provider** (OpenIddict) and its **government service gateway**. Citizens verified against the civil registry get an admin-approved digital identity and use it everywhere (\"Sign in with Sheba\" — think UAE Pass / Absher); ministries plug in as relying parties and as integration targets fulfilled through a credential vault, pluggable auth adapters, and a step-based service-request workflow engine.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "jsdom": "^29.1.1",
+    "mermaid": "^11.16.0"
+  }
+}

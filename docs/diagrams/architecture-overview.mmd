@@ -1,0 +1,59 @@
+%% Sheba — modular monolith architecture overview
+%% Source of truth: docs/sheba.md §3
+flowchart TB
+    subgraph Clients["External Consumers"]
+        CIT["Citizen Portal (SPA)\nRP: sheba-portal"]
+        ADM["Admin Dashboard (SPA)\nRP: sheba-admin"]
+        RP["External Relying Parties\n'Sign in with Sheba'"]
+        MIN_SYS["Ministry Systems\n(machine clients)"]
+    end
+
+    subgraph Host["Sheba.Api — single ASP.NET Core 9 process"]
+        GW["Gateway concerns\nrouting · authN/Z · rate limiting\nJSend wrapping · correlation IDs"]
+        subgraph Modules["Modules (in-process, strict boundaries)"]
+            ID["Identity\nOpenIddict OIDC/OAuth2.1\neKYC · approvals · RPs"]
+            CZ["Citizen\nprofiles"]
+            MI["Ministry\nregistry · credentials\nauth adapters"]
+            SR["ServiceRequest\ncatalog · workflow engine"]
+            DO["Document\nMinIO storage"]
+            WA["Wallet\nW3C VCs · DIDs"]
+            PA["Payment\nfees · orders"]
+            NO["Notification\nemail · SMS"]
+            AU["Audit\nappend-only log"]
+            AD["Admin\nKPIs · BI read model · reports"]
+        end
+        BUS["In-process event bus\nMediatR + Transactional Outbox"]
+    end
+
+    subgraph Data["Data plane (Docker Compose)"]
+        PG[("PostgreSQL 16\none DB · schema per module")]
+        RD[("Redis\nOTP throttle · cache")]
+        MO[("MinIO\ndocuments · KYC files")]
+        SEQ["Seq\nstructured logs"]
+        HF["Hangfire\noutbox dispatch · reports"]
+    end
+
+    subgraph External["External Systems (pluggable adapters)"]
+        NID["Civil Registry / NID\nINationalIdProvider"]
+        MAPI["Ministry APIs\nOIDC · OAuth2 · API key\nbearer · basic"]
+        SMS["SMS Gateway\nIOtpProvider"]
+        SMTP["SMTP\n(MailHog in dev)"]
+    end
+
+    CIT --> GW
+    ADM --> GW
+    RP -->|"OIDC authorize/token"| GW
+    MIN_SYS -->|"client_credentials + webhooks"| GW
+    GW --> Modules
+    Modules <--> BUS
+    Modules --> PG
+    ID --> RD
+    DO --> MO
+    Host --> SEQ
+    HF --> BUS
+    ID -.->|adapter| NID
+    ID -.->|adapter| SMS
+    NO -.-> SMTP
+    NO -.->|adapter| SMS
+    MI -.->|"credential vault + adapters"| MAPI
+    SR -->|"via Ministry adapters"| MI

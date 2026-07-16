@@ -1,0 +1,145 @@
+%% Identity bounded context — schema: identity (docs/database-design.md)
+%% Cross-context references (Document IDs, Ministry IDs) are logical IDs — no FK across schemas.
+erDiagram
+    ACCOUNTS ||--o{ IDENTITY_REQUESTS : "submits"
+    ACCOUNTS ||--o{ OTP_RECORDS : "receives"
+    ACCOUNTS ||--o{ REFRESH_TOKEN_FAMILIES : "holds"
+    IDENTITY_REQUESTS ||--o{ IDENTITY_REQUEST_DOCUMENTS : "attaches"
+    ADMIN_USERS ||--o{ IDENTITY_REQUESTS : "reviews"
+    ADMIN_USERS ||--o{ RELYING_PARTIES : "registers"
+    RELYING_PARTIES ||--o{ RP_REDIRECT_URIS : "allows"
+    RELYING_PARTIES ||--o{ RP_SCOPES : "grants"
+
+    ACCOUNTS {
+        uuid id PK
+        varchar national_id UK "from civil registry; unique"
+        varchar phone_number "from civil registry"
+        varchar full_name_ar "registry snapshot"
+        varchar full_name_en "registry snapshot"
+        varchar username UK "citizen-chosen"
+        varchar email UK "citizen-chosen"
+        timestamptz email_verified_at "nullable"
+        timestamptz phone_verified_at "nullable"
+        text password_hash "Argon2id"
+        int status "AccountStatus enum"
+        int identity_level "LoA 1-3"
+        int failed_login_count
+        timestamptz locked_until "nullable; exponential backoff"
+        timestamptz last_login_at "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    IDENTITY_REQUESTS {
+        uuid id PK
+        uuid account_id FK
+        int request_type "OpenAccount|UpgradeLoa2|UpgradeLoa3|ReopenAccount"
+        int status "Pending|UnderReview|Approved|Rejected|Cancelled"
+        timestamptz submitted_at
+        timestamptz reviewed_at "nullable"
+        uuid reviewed_by_admin_id FK "nullable"
+        text rejection_reason "nullable"
+        text admin_notes "nullable"
+        jsonb citizen_snapshot_json "immutable registry snapshot"
+    }
+
+    IDENTITY_REQUEST_DOCUMENTS {
+        uuid id PK
+        uuid request_id FK
+        varchar document_type "NATIONAL_ID_PHOTO|SELFIE|..."
+        uuid document_service_id "logical ref to document.documents"
+        timestamptz uploaded_at
+    }
+
+    ADMIN_USERS {
+        uuid id PK
+        varchar employee_id UK
+        varchar email UK
+        varchar full_name
+        int role "SuperAdmin|IdentityReviewer|MinistryManager|Auditor|Support"
+        varchar department "nullable"
+        varchar status "ACTIVE|SUSPENDED|DEACTIVATED"
+        text password_hash "Argon2id"
+        text mfa_secret "encrypted TOTP secret; nullable"
+        timestamptz last_login_at "nullable"
+    }
+
+    RELYING_PARTIES {
+        uuid id PK
+        varchar client_id UK "OpenIddict application id"
+        varchar name
+        varchar name_ar "nullable"
+        text description "nullable"
+        text logo_url "nullable"
+        int client_type "Confidential|Public"
+        int party_type "Ministry|Organization|Internal|Developer"
+        uuid ministry_id "logical ref to ministry.ministries; nullable"
+        uuid organization_id "nullable"
+        varchar status "ACTIVE|INACTIVE"
+        timestamptz registered_at
+        uuid registered_by FK
+        jsonb metadata "nullable"
+    }
+
+    RP_REDIRECT_URIS {
+        uuid id PK
+        uuid relying_party_id FK
+        text uri
+        varchar uri_type "REDIRECT|POST_LOGOUT"
+    }
+
+    RP_SCOPES {
+        uuid id PK
+        uuid relying_party_id FK
+        varchar scope_name "unique per RP"
+    }
+
+    OTP_RECORDS {
+        uuid id PK
+        uuid account_id FK
+        int purpose "Login|Registration|PasswordReset|..."
+        int channel "Sms|Email|Totp"
+        text code_hash "Argon2id; plaintext never stored"
+        timestamptz expires_at "5-min TTL"
+        timestamptz used_at "nullable; single-use"
+        int attempt_count "max 3"
+        inet ip_address "nullable"
+        text user_agent "nullable"
+    }
+
+    REFRESH_TOKEN_FAMILIES {
+        uuid id PK
+        uuid account_id FK
+        varchar client_id "RP client"
+        uuid family_id UK "reuse = revoke whole family"
+        text current_token_hash
+        timestamptz issued_at
+        timestamptz expires_at "30 days"
+        timestamptz revoked_at "nullable"
+        varchar revocation_reason "nullable"
+        text device_fingerprint "nullable"
+        inet ip_address "nullable"
+    }
+
+    SCOPE_DEFINITIONS {
+        uuid id PK
+        varchar name UK "openid|profile|civil_data|..."
+        varchar display_name
+        varchar display_name_ar "nullable"
+        text description "nullable"
+        text_array claims "claim names exposed"
+        boolean is_system
+        int requires_loa "minimum LoA"
+    }
+
+    OUTBOX_MESSAGES {
+        uuid id PK
+        varchar aggregate_type
+        uuid aggregate_id
+        varchar event_type
+        jsonb payload
+        timestamptz created_at
+        timestamptz published_at "nullable; null = pending"
+        text error "nullable"
+        int retry_count
+    }

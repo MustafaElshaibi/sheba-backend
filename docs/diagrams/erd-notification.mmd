@@ -1,0 +1,26 @@
+%% Notification bounded context — schema: notification
+%% Append-only delivery log. notification_templates is planned (backlog: T-NOT-1).
+erDiagram
+    NOTIFICATION_TEMPLATES ||--o{ NOTIFICATION_RECORDS : "rendered as (planned)"
+
+    NOTIFICATION_RECORDS {
+        uuid id PK
+        uuid recipient_id "logical ref to identity.accounts"
+        varchar channel "Email|Sms"
+        varchar recipient "email address or phone"
+        varchar subject "email subject or SMS tag"
+        text body
+        boolean succeeded
+        text error_message "nullable"
+        timestamptz sent_at "immutable once written"
+    }
+
+    NOTIFICATION_TEMPLATES {
+        uuid id PK
+        varchar code UK "IDENTITY_APPROVED|OTP_LOGIN|... (planned)"
+        varchar channel "Email|Sms|Push"
+        varchar subject_template
+        text body_template_ar
+        text body_template_en
+        boolean is_active
+    }

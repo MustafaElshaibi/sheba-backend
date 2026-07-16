@@ -1,0 +1,121 @@
+%% ServiceRequest bounded context — schema: service_req
+%% ministry_id / ministry_endpoint_id / citizen_id are logical cross-context IDs (no FK).
+erDiagram
+    SERVICE_CATEGORIES ||--o{ SERVICE_CATEGORIES : "parent of"
+    SERVICE_CATEGORIES ||--o{ SERVICES : "groups"
+    SERVICES ||--o| SERVICE_FORM_SCHEMAS : "defines form"
+    SERVICES ||--o{ SERVICE_FEES : "charges"
+    SERVICES ||--o{ SERVICE_REQUIRED_DOCUMENTS : "requires"
+    SERVICES ||--o{ SERVICE_WORKFLOW_STEPS : "executes as"
+    SERVICES ||--o{ SERVICE_REQUESTS : "requested as"
+    SERVICE_REQUESTS ||--o{ REQUEST_STEP_EXECUTIONS : "progresses through"
+    SERVICE_WORKFLOW_STEPS ||--o{ REQUEST_STEP_EXECUTIONS : "instantiated as"
+
+    SERVICE_CATEGORIES {
+        uuid id PK
+        uuid parent_id FK "nullable; hierarchy"
+        varchar name_ar
+        varchar name_en
+        text icon_url "nullable"
+        int display_order
+        boolean is_active
+    }
+
+    SERVICES {
+        uuid id PK
+        uuid category_id FK
+        uuid ministry_id "logical ref to ministry.ministries"
+        varchar code UK "e.g. PASSPORT_RENEW"
+        varchar name_ar
+        varchar name_en
+        text description_ar "nullable"
+        text description_en "nullable"
+        jsonb eligibility_rules_json "nullable; JSON Logic"
+        int required_loa "1-3"
+        boolean requires_appointment
+        boolean is_active "false until published"
+        boolean is_online
+        int average_days "nullable; SLA basis"
+        int display_order
+        text tags_csv "nullable"
+        jsonb metadata_json "nullable"
+    }
+
+    SERVICE_FORM_SCHEMAS {
+        uuid id PK
+        uuid service_id FK "1:1"
+        varchar schema_version "default 1.0"
+        jsonb form_schema_json "JSON Schema"
+        jsonb ui_schema_json "nullable; rendering hints"
+        jsonb validation_rules_json "nullable; server-side rules"
+    }
+
+    SERVICE_FEES {
+        uuid id PK
+        uuid service_id FK
+        varchar fee_type "BASE|EXPEDITE|DELIVERY"
+        varchar name_ar
+        varchar name_en
+        numeric amount
+        char currency "YER default"
+        boolean is_mandatory
+        date valid_from
+        date valid_until "nullable"
+    }
+
+    SERVICE_REQUIRED_DOCUMENTS {
+        uuid id PK
+        uuid service_id FK
+        varchar document_type "NATIONAL_ID|BIRTH_CERT|..."
+        varchar name_ar
+        varchar name_en
+        boolean is_mandatory
+        int max_size_mb "default 5"
+        text allowed_mime_types_csv "nullable"
+    }
+
+    SERVICE_WORKFLOW_STEPS {
+        uuid id PK
+        uuid service_id FK
+        int step_order
+        varchar name_ar
+        varchar name_en
+        int step_type "CitizenSubmit|Payment|MinistryApiCall|MinistryReview|AdminReview|DocumentIssue|Notification|WebhookWait|Appointment"
+        int actor "Citizen|System|Ministry|ShebaAdmin"
+        uuid ministry_endpoint_id "logical ref to ministry.ministry_endpoints; nullable"
+        int timeout_hours "nullable"
+        boolean is_automated
+        int on_success_step "nullable; branch target"
+        int on_failure_step "nullable; branch target"
+        jsonb config_json "nullable; step config"
+    }
+
+    SERVICE_REQUESTS {
+        uuid id PK
+        varchar reference_number UK "SHB-2026-XXXXXX"
+        uuid service_id FK
+        uuid citizen_id "logical ref to identity.accounts"
+        int status "RequestLifecycleStatus enum"
+        int current_step
+        jsonb form_data_json "citizen submission; PII"
+        varchar priority "NORMAL|EXPRESS|URGENT"
+        timestamptz submitted_at
+        timestamptz completed_at "nullable"
+        timestamptz due_date "nullable; SLA deadline"
+        text rejection_reason "nullable"
+        text notes "nullable; internal"
+    }
+
+    REQUEST_STEP_EXECUTIONS {
+        uuid id PK
+        uuid request_id FK
+        uuid step_id FK
+        int step_order
+        int status "Pending|Running|Completed|Failed|Skipped"
+        timestamptz started_at
+        timestamptz completed_at "nullable"
+        uuid actor_id "nullable"
+        varchar actor_type "CITIZEN|SYSTEM|MINISTRY|ADMIN; nullable"
+        jsonb result_json "nullable; ministry response, decision"
+        text error_message "nullable"
+    }

@@ -1,0 +1,27 @@
+%% Sheba — service request lifecycle (RequestLifecycleStatus enum, docs/sheba.md §5.5)
+stateDiagram-v2
+    [*] --> Draft : citizen starts form
+    Draft --> Submitted : submit (LoA + eligibility +\nrequired documents validated)
+    [*] --> Submitted : direct submission
+
+    Submitted --> PaymentPending : Payment step\n(PaymentOrder created)
+    PaymentPending --> Processing : payment completed
+    Submitted --> Processing : no fee /\nautomated first step
+
+    Processing --> AwaitingMinistry : MinistryApiCall async /\nWebhookWait step
+    AwaitingMinistry --> Processing : ministry webhook or\nstatus poll resolves
+    Processing --> UnderReview : MinistryReview or\nAdminReview step
+    UnderReview --> Processing : review passed
+    UnderReview --> ActionRequired : more info needed\nfrom citizen
+    ActionRequired --> Processing : citizen responds
+
+    Processing --> Completed : final step done →\nServiceRequestCompletedEvent
+    UnderReview --> Rejected : review failed\n(reason recorded)
+    Submitted --> Cancelled : citizen cancels
+    Processing --> Cancelled : citizen cancels\n(before completion)
+    AwaitingMinistry --> Expired : SLA deadline passed\n(due_date breach)
+
+    Completed --> [*]
+    Rejected --> [*]
+    Cancelled --> [*]
+    Expired --> [*]

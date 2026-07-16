@@ -1,0 +1,24 @@
+%% Sheba — citizen digital-identity onboarding state machine
+%% Mirrors Identity.Domain AccountStatus + IdentityRequest workflow (docs/sheba.md §6)
+stateDiagram-v2
+    [*] --> PendingVerification : NID + phone verified against\ncivil registry (INationalIdProvider)
+
+    PendingVerification --> PendingEmailVerification : Registration OTP verified,\ncitizen sets username/email/password
+    PendingVerification --> [*] : OTP expired / max attempts\n(record purged)
+
+    PendingEmailVerification --> PendingAdminApproval : Email link confirmed →\nIdentityRequestSubmittedEvent\n(admins notified by email)
+
+    PendingAdminApproval --> Approved : Admin approves →\nIdentityRequestDecidedEvent(approved)\ncitizen notified · VC issued
+    PendingAdminApproval --> Rejected : Admin rejects (reason required) →\nIdentityRequestDecidedEvent(rejected)\ncitizen notified
+
+    Approved --> Suspended : Security hold /\nadmin action
+    Suspended --> Approved : Reinstated
+    Approved --> Deactivated : Citizen request /\nadmin closure
+    Rejected --> PendingVerification : Re-application\n(new IdentityRequest)
+    Deactivated --> [*]
+
+    note right of PendingAdminApproval
+        No login possible in any state
+        except Approved. Login = NID or
+        username + password, then SMS OTP.
+    end note

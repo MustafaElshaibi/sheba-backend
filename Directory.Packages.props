@@ -1,0 +1,92 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="Core">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi"                   Version="9.0.6" />
+    <PackageVersion Include="Scalar.AspNetCore"                              Version="2.6.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore"                         Version="7.2.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="CQRS">
+    <PackageVersion Include="MediatR"                                        Version="12.5.0" />
+    <PackageVersion Include="MediatR.Contracts"                              Version="2.0.1" />
+    <PackageVersion Include="FluentValidation"                               Version="11.11.0" />
+    <PackageVersion Include="FluentValidation.AspNetCore"                    Version="11.3.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Database">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore"                  Version="9.0.6" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational"       Version="9.0.6" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design"           Version="9.0.6" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL"          Version="9.0.4" />
+    <PackageVersion Include="EFCore.NamingConventions"                       Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="OpenIddict">
+    <PackageVersion Include="OpenIddict.AspNetCore"                          Version="5.7.0" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore"                 Version="5.7.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Cache">
+    <PackageVersion Include="StackExchange.Redis"                            Version="2.8.41" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup Label="Storage">
+    <PackageVersion Include="Minio"                                          Version="6.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="BackgroundJobs">
+    <PackageVersion Include="Hangfire.AspNetCore"                            Version="1.8.20" />
+    <PackageVersion Include="Hangfire.PostgreSql"                            Version="1.20.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Reports">
+    <PackageVersion Include="QuestPDF"                                       Version="2025.1.0" />
+    <PackageVersion Include="ClosedXML"                                      Version="0.105.0" />
+    <PackageVersion Include="CsvHelper"                                      Version="33.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Security">
+    <PackageVersion Include="BCrypt.Net-Next"                               Version="4.0.3" />
+    <PackageVersion Include="Isopoh.Cryptography.Argon2"                     Version="2.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions"      Version="9.0.6" />
+    <PackageVersion Include="Otp.NET"                                        Version="1.4.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="HTTP">
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience"           Version="9.6.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Logging">
+    <PackageVersion Include="Serilog.AspNetCore"                             Version="8.0.3" />
+    <PackageVersion Include="Serilog.Sinks.Seq"                              Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Mapping">
+    <PackageVersion Include="Mapster"                                        Version="7.4.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Versioning">
+    <PackageVersion Include="Asp.Versioning.Http"                            Version="8.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Notifications">
+    <PackageVersion Include="MailKit"                                        Version="4.12.1" />
+    <PackageVersion Include="Twilio"                                         Version="7.7.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk"                         Version="17.14.1" />
+    <PackageVersion Include="xunit"                                          Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio"                      Version="3.1.1" />
+    <PackageVersion Include="FluentAssertions"                               Version="8.3.0" />
+    <PackageVersion Include="NSubstitute"                                    Version="5.3.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory"         Version="9.0.6" />
+  </ItemGroup>
+  <ItemGroup Label="Coverage"><PackageVersion Include="coverlet.collector" Version="6.0.4" /></ItemGroup>
+</Project>
+
+

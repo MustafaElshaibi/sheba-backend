@@ -1,0 +1,77 @@
+# Roadmap — Phased Milestones
+
+> Extract of [sheba.md §16](sheba.md#16-implementation-roadmap); sheba.md wins conflicts.
+> Task-level checklist: [TASKS.md](../TASKS.md). The build order respects module dependencies:
+> Identity underpins everything; Ministry precedes ServiceRequest depth; durable events precede
+> Notification/Admin/Wallet guarantees.
+
+## Phase 0 — Harden the base *(current)*
+
+Everything here is prerequisite plumbing; no new features.
+
+- **T-API-1** JSend envelope: `JSendResponse<T>` + wrapping filter + exception-middleware swap +
+  Swagger schema filter ([api-contract.md](api-contract.md)).
+- **T-DB-1** EF migrations for the 9 module contexts still on `EnsureCreated()`; ban the fallback.
+- **T-EVT-1** Outbox to Shared.Kernel + Hangfire dispatcher + per-module outbox tables + consumer
+  inbox dedup ([sheba.md §11.1](sheba.md#111-transactional-outbox-the-reliability-backbone)).
+- **T-SEC-2** ASP.NET `RateLimiter` policies (auth endpoints strictest).
+- **T-STD-1** `Result<T>` in Shared.Kernel; adopt per module in single passes.
+- Housekeeping: remove `Class1.cs` stubs (Citizen module), align README/quickstart.
+
+**Exit:** all endpoints emit JSend; `docker compose up` from a clean volume migrates and seeds;
+kill -9 during a command loses no events; auth endpoints rate-limited.
+
+## Phase 1 — Identity completion
+
+- **T-SEC-1** Enforce admin TOTP at login (secret already modeled).
+- **T-SEC-4** Signing-cert rotation-by-overlap procedure + docs + drill.
+- Password reset flow (OTP-gated) & account recovery rules.
+- RP management polish: secret rotation endpoint, per-RP consent screen copy.
+- **T-AUTH-1** Ministry-Admin scoping claim + ownership policies end-to-end.
+
+**Exit:** STRIDE rows in [sheba.md §13.5](sheba.md#135-stride-summary-auth-flows) all mitigated in
+code, verified by contract tests.
+
+## Phase 2 — Integration depth
+
+- **T-SRV-1** Webhook timestamp window + delivery-id dedup completing the HMAC check.
+- **T-SRV-2** Server-side JSON-Schema validation of service form submissions (JsonSchema.Net).
+- **T-INT-1** OpenCRVS `INationalIdProvider` adapter (proves the second registry shape).
+- **T-INT-2** OTP provider failover ordering.
+- Ministry health dashboard wiring (`TestConnectionAsync` → Admin KPIs).
+
+**Exit:** a stub external ministry round-trips a service request including an async webhook, with
+replay attempts rejected.
+
+## Phase 3 — Money & credentials
+
+- **T-PAY-1** Payment application layer: CreateOrder / ConfirmPayment / Refund commands,
+  `PaymentCompletedEvent` consumed by the workflow (replaces direct `MarkPaymentComplete`
+  coupling), `IPaymentGateway` seam with mock gateway.
+- Wallet: VC verification + presentation endpoints; revocation-status API.
+- **T-NOT-1** Bilingual notification templates + template-keyed sends.
+
+**Exit:** paid service completes end-to-end on events alone; a third party can verify a Sheba VC.
+
+## Phase 4 — Audit, tests & scale-readiness
+
+- **T-AUD-1..3** INSERT-only grant, hash-chain + verification job, monthly partitions.
+- **T-ADM-1** BI projection rebuild (replay) command.
+- **T-TST-1..4** Test debt to the bar in [testing.md](testing.md) (coverage floor 80 % on
+  Domain/Application).
+- **T-SEC-6/7** At-rest encryption: DB volume, `form_data_json` column crypto, MinIO SSE (T-DOC-2).
+- Load test (k6/NBomber) against [performance.md §1](performance.md) targets.
+
+**Exit:** tamper-evidence demonstrable to an auditor; perf targets met; CI green with coverage
+gate.
+
+## Phase 5 — Production migration *(post-pilot)*
+
+- Real civil-registry adapter + contract tests against the live sandbox.
+- Real SMS provider(s); MailHog → SMTP relay.
+- TLS reverse proxy, Docker secrets/vault (T-SEC-3), backup + restore drill.
+- Extraction dry run: Notification module to its own container + RabbitMQ
+  ([sheba.md §3.4](sheba.md#34-migration-path-to-services)).
+
+**Exit:** go-live checklist green; one module successfully running out-of-process proves the
+seams.

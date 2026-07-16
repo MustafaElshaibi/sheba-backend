@@ -1,0 +1,30 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+**/Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Logs & temp
+*.log
+api-out.log
+api-err.log
+
+# Docs (not needed in the image)
+docs/
+README.md

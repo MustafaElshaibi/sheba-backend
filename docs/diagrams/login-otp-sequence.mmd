@@ -1,0 +1,32 @@
+%% Sheba — citizen login with password + SMS OTP (custom OpenIddict grant)
+%% docs/sheba.md §6.3
+sequenceDiagram
+    autonumber
+    actor C as Citizen
+    participant P as Portal (RP: sheba-portal)
+    participant API as Sheba.Api /api/identity
+    participant OIDC as OpenIddict /connect/token
+    participant OTP as IOtpProvider (SMS)
+    participant DB as identity schema
+
+    C->>P: national ID (or username) + password
+    P->>API: POST /api/identity/login
+    API->>DB: find account (NID or username)
+    API->>API: status == Approved? not locked?
+    API->>API: verify Argon2id password hash
+    alt invalid credentials
+        API-->>P: JSend fail (generic message, 401)\nfailed_login_count++, lock after 5
+    end
+    API->>DB: invalidate previous OTPs, store new Argon2id(OTP)
+    API->>OTP: send 6-digit code to registered phone
+    API-->>P: JSend success { account_id, otp_required: true }
+
+    C->>P: enters OTP
+    P->>OIDC: POST grant_type=urn:sheba:grant:national_id_otp\naccount_id + otp (+ client_id, scope)
+    OIDC->>DB: validate OTP (unused, unexpired, ≤3 attempts, hash match)
+    alt OTP invalid
+        OIDC-->>P: JSend fail (400 invalid_grant)
+    end
+    OIDC->>DB: mark OTP used, reset failure counters
+    OIDC-->>P: access_token (JWT, 15 min)\nid_token (sub, loa, national_id_hash)\nrefresh_token (rotating family, 30 days)
+    P-->>C: signed in (SSO session across all RPs)

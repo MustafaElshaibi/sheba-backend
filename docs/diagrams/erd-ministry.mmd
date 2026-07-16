@@ -1,0 +1,94 @@
+%% Ministry bounded context — schema: ministry
+%% The integration registry + credential vault. All secret columns AES-256-GCM encrypted.
+erDiagram
+    MINISTRIES ||--o{ MINISTRIES : "parent of (sub-ministries)"
+    MINISTRIES ||--o{ MINISTRY_AUTH_CONFIGS : "authenticates via"
+    MINISTRIES ||--o{ MINISTRY_ENDPOINTS : "exposes"
+    MINISTRIES ||--o{ MINISTRY_WEBHOOKS : "calls back via"
+    MINISTRY_AUTH_CONFIGS ||--o| MINISTRY_AUTH_CREDENTIALS : "secured by"
+    MINISTRY_AUTH_CONFIGS ||--o{ MINISTRY_ENDPOINTS : "used by"
+
+    MINISTRIES {
+        uuid id PK
+        uuid parent_ministry_id FK "null = top-level"
+        varchar code UK "MOI|MOJ|MOH..."
+        varchar name_ar
+        varchar name_en
+        text description_ar "nullable"
+        text description_en "nullable"
+        text logo_url "nullable"
+        text website_url "nullable"
+        varchar contact_email "nullable"
+        varchar contact_phone "nullable"
+        text address_ar "nullable"
+        text address_en "nullable"
+        boolean is_active
+        int depth_level "0=ministry 1=dept 2=division"
+        int display_order
+        jsonb metadata_json "nullable"
+    }
+
+    MINISTRY_AUTH_CONFIGS {
+        uuid id PK
+        uuid ministry_id FK
+        varchar name "e.g. Civil Registry Production"
+        int auth_type "Oidc|OAuth2|ApiKey|BearerToken|BasicAuth|Saml|Custom|None"
+        text base_url
+        boolean is_active
+        boolean is_default
+        text health_check_path "nullable"
+        int timeout_seconds "default 30"
+        int retry_count "default 3"
+    }
+
+    MINISTRY_AUTH_CREDENTIALS {
+        uuid id PK
+        uuid auth_config_id FK "1:1"
+        text oidc_token_endpoint "nullable"
+        text oidc_client_id "encrypted; nullable"
+        text oidc_client_secret "encrypted; nullable"
+        text oidc_scope "nullable"
+        text api_key_header_name "nullable"
+        text api_key_value "encrypted; nullable"
+        int api_key_placement "Header|Query|Cookie; nullable"
+        text bearer_token "encrypted; nullable"
+        text basic_username "encrypted; nullable"
+        text basic_password "encrypted; nullable"
+        text cached_access_token "encrypted; refreshed automatically"
+        timestamptz token_expires_at "nullable"
+        timestamptz last_verified_at "nullable"
+        timestamptz last_used_at "nullable"
+        uuid created_by "admin user id"
+        uuid updated_by "nullable"
+    }
+
+    MINISTRY_ENDPOINTS {
+        uuid id PK
+        uuid ministry_id FK
+        uuid auth_config_id FK "nullable; which auth to use"
+        varchar code "unique within ministry"
+        varchar name_ar
+        varchar name_en
+        text description_ar "nullable"
+        text description_en "nullable"
+        varchar http_method "GET|POST|PUT|DELETE|PATCH"
+        text path_template "e.g. /citizens/{nationalId}/verify"
+        jsonb request_schema_json "JSON Schema; nullable"
+        jsonb response_schema_json "JSON Schema; nullable"
+        int endpoint_type "DataQuery|ServiceAction|WebhookRegister|StatusCheck|DocumentFetch|Health"
+        boolean is_active
+        int timeout_seconds
+        int rate_limit_per_minute "nullable"
+        boolean requires_citizen_consent
+    }
+
+    MINISTRY_WEBHOOKS {
+        uuid id PK
+        uuid ministry_id FK
+        uuid endpoint_id FK "nullable; triggering action"
+        varchar event_type "e.g. service_request.completed"
+        text sheba_webhook_path "receiver path on Sheba"
+        text signing_secret "encrypted; HMAC-SHA256 verification"
+        boolean is_active
+        timestamptz last_received_at "nullable"
+    }

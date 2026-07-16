@@ -1,0 +1,26 @@
+%% Document bounded context — schema: document
+%% File bytes live in MinIO; rows are metadata. owner_id is a logical ref to identity.accounts.
+erDiagram
+    DOCUMENTS ||--o{ DOCUMENT_ACCESS_GRANTS : "shared via"
+
+    DOCUMENTS {
+        uuid id PK
+        uuid owner_id "logical ref to identity.accounts"
+        varchar file_name "original client name"
+        varchar content_type "MIME"
+        bigint size_bytes
+        varchar bucket_name
+        varchar object_key "MinIO key"
+        varchar document_type "NATIONAL_ID_PHOTO|SELFIE|GENERAL|..."
+        boolean is_deleted "soft delete only"
+        timestamptz deleted_at "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    DOCUMENT_ACCESS_GRANTS {
+        uuid id PK
+        uuid document_id FK
+        uuid grantee_id "logical ref; e.g. ministry reviewer"
+        timestamptz expires_at "time-boxed read access"
+    }

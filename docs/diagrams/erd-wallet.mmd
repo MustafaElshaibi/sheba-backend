@@ -1,0 +1,37 @@
+%% Wallet bounded context — schema: wallet
+%% W3C Verifiable Credentials stored as signed JWT-VC (compact JWS, RSA).
+erDiagram
+    DID_DOCUMENTS ||--o{ VERIFIABLE_CREDENTIALS : "issues / holds"
+    CREDENTIAL_SCHEMAS ||--o{ VERIFIABLE_CREDENTIALS : "typed by"
+
+    DID_DOCUMENTS {
+        uuid id PK
+        varchar did UK "did:sheba:issuer | did:sheba:citizen:{id}"
+        uuid subject_id "logical ref to identity.accounts; null for issuer DID"
+        text public_key_pem "RSA public key"
+        boolean is_active
+    }
+
+    CREDENTIAL_SCHEMAS {
+        uuid id PK
+        varchar schema_uri UK "https://sheba.gov.ye/schemas/v1/identity"
+        varchar name
+        varchar version
+        varchar issuer_did
+        jsonb schema_definition_json "JSON Schema"
+        boolean is_active
+    }
+
+    VERIFIABLE_CREDENTIALS {
+        uuid id PK
+        uuid subject_id "logical ref to identity.accounts"
+        varchar credential_type "DigitalIdentityCredential|..."
+        varchar issuer_did
+        varchar subject_did
+        text jwt "signed compact JWS"
+        jsonb claims_json "decoded claims for quick reads"
+        timestamptz issued_at
+        timestamptz expires_at "nullable"
+        boolean is_revoked
+        timestamptz revoked_at "nullable"
+    }

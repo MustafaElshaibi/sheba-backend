@@ -1,0 +1,13 @@
+﻿bin/
+obj/
+.vs/
+*.user
+*.suo
+.idea/
+.DS_Store
+*.nupkg
+*.snupkg
+secrets.json
+appsettings.Local.json
+
+.fake

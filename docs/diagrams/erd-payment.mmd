@@ -1,0 +1,28 @@
+%% Payment bounded context — schema: payment
+%% service_request_id / citizen_id are logical cross-context IDs.
+erDiagram
+    PAYMENT_ORDERS ||--o{ PAYMENT_TRANSACTIONS : "settled by"
+
+    PAYMENT_ORDERS {
+        uuid id PK
+        uuid service_request_id "logical ref to service_req.service_requests"
+        uuid citizen_id "logical ref to identity.accounts"
+        varchar order_number UK "PAY-YYYYMMDD-XXXXXXXX"
+        numeric total_amount
+        char currency "YER default"
+        int status "Pending|Completed|Failed|Refunded|Cancelled"
+        text description "nullable"
+        text payment_url "nullable; gateway or mock pay URL"
+        timestamptz paid_at "nullable"
+        varchar gateway_reference "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    PAYMENT_TRANSACTIONS {
+        uuid id PK
+        uuid payment_order_id FK
+        varchar transaction_type "CHARGE|REFUND|..."
+        numeric amount
+        jsonb gateway_response "nullable; sanitized"
+    }

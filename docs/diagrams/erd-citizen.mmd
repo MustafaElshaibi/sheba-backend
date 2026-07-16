@@ -1,0 +1,18 @@
+%% Citizen bounded context — schema: citizen
+%% account_id is a LOGICAL 1:1 reference to identity.accounts (no cross-schema FK).
+erDiagram
+    CITIZEN_PROFILES {
+        uuid id PK
+        uuid account_id UK "logical 1:1 ref to identity.accounts"
+        varchar national_id "denormalized read copy"
+        varchar full_name_ar
+        varchar full_name_en
+        varchar email "nullable; profile contact"
+        varchar phone_number "nullable"
+        date date_of_birth "nullable"
+        text address "nullable"
+        varchar city "nullable"
+        varchar governorate "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }

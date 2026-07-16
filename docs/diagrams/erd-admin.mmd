@@ -1,0 +1,43 @@
+%% Admin bounded context — schema: admin_data
+%% Event-fed BI read model: populated only by MediatR event handlers + Hangfire jobs,
+%% never by API command handlers. Gateway module has no schema.
+erDiagram
+    DAILY_REGISTRATION_SNAPSHOTS {
+        uuid id PK
+        date date UK
+        int total_registrations
+        int approved
+        int rejected
+        int pending_eod "pending at end of day"
+        numeric avg_approval_hours "nullable"
+    }
+
+    DAILY_SERVICE_REQUEST_SNAPSHOTS {
+        uuid id PK
+        date date "unique with service_id"
+        uuid service_id "logical ref to service_req.services"
+        uuid ministry_id "logical ref to ministry.ministries"
+        int submitted
+        int completed
+        int rejected
+        int cancelled
+        int sla_breach
+        numeric avg_completion_hours "nullable"
+    }
+
+    REPORT_JOBS {
+        uuid id PK
+        int report_type "IdentityRequests|ServiceRequests|AuditLog"
+        int format "Pdf|Excel|Csv"
+        int status "Queued|Running|Done|Failed"
+        jsonb filters_json "nullable"
+        uuid requested_by "admin user id"
+        varchar hangfire_job_id "nullable"
+        bytea file_bytes "nullable; generated file"
+        varchar file_name "nullable"
+        bigint file_size_bytes "nullable"
+        int row_count "nullable"
+        text error_message "nullable"
+        timestamptz started_at "nullable"
+        timestamptz completed_at "nullable"
+    }

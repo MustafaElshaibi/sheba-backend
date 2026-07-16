@@ -1,0 +1,29 @@
+%% Sheba — outbound ministry call + inbound webhook (docs/sheba.md §7)
+sequenceDiagram
+    autonumber
+    participant WF as ServiceRequest\nworkflow engine
+    participant REG as Ministry registry\n(endpoints + auth configs)
+    participant ADP as IMinistryAuthAdapter\n(OIDC/OAuth2/ApiKey/Bearer/Basic)
+    participant EXT as External Ministry API
+    participant WH as Sheba webhook receiver\n(ServiceRequest)
+
+    WF->>REG: resolve MinistryEndpoint + MinistryAuthConfig
+    REG-->>WF: path template, method, timeout,\nauth type, encrypted credential
+    WF->>ADP: authenticate(request)
+    ADP->>ADP: decrypt credential (AES-256-GCM)\nat call time only
+    opt OIDC / OAuth2 client_credentials
+        ADP->>EXT: POST token endpoint (cached until expiry)
+        EXT-->>ADP: access_token
+    end
+    ADP-->>WF: authenticated HttpRequest
+    WF->>EXT: invoke endpoint (resilience pipeline:\nretry + circuit breaker + per-endpoint timeout)
+    alt synchronous result
+        EXT-->>WF: response → RequestStepExecution.ResultJson\nstep Completed → next step
+    else asynchronous processing
+        EXT-->>WF: 202 Accepted
+        WF->>WF: status = AwaitingMinistry (WebhookWait step)
+        EXT->>WH: POST callback\nX-Sheba-Signature: HMAC-SHA256(secret, timestamp.body)
+        WH->>WH: verify signature + timestamp window\n+ idempotency key (dedup replay)
+        WH->>WF: HandleWebhookCallback → step Completed
+    end
+    WF->>WF: advance workflow, raise WorkflowStepCompletedEvent

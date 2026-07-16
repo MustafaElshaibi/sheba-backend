@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sheba.Admin.Domain\Sheba.Admin.Domain.csproj" />
+    <!-- Domain event contracts for cross-module MediatR handlers -->
+    <ProjectReference Include="..\..\Identity\Sheba.Identity.Domain\Sheba.Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\ServiceRequest\Sheba.ServiceRequest.Domain\Sheba.ServiceRequest.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Mapster" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

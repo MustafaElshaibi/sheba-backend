@@ -1,0 +1,103 @@
+# Sheba e-Government Platform — Docker Compose
+# 6 containers: sheba-api, postgres, redis, minio, mailhog, seq
+#
+# Usage:
+#   docker compose up -d           — start all services
+#   docker compose up -d --build   — rebuild API and start
+#   docker compose logs -f sheba-api
+#
+# Local URLs when running:
+#   Sheba API          http://localhost:5000
+#   Swagger UI         http://localhost:5000/swagger
+#   OIDC Discovery     http://localhost:5000/.well-known/openid-configuration
+#   Mailhog (emails)   http://localhost:8025
+#   Seq (logs)         http://localhost:8081
+#   MinIO Console      http://localhost:9001
+
+services:
+
+  sheba-api:
+    build:
+      context: .
+      dockerfile: src/Sheba.Api/Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=sheba;Username=sheba;Password=sheba_dev
+      - Redis__ConnectionString=redis:6379
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=minioadmin
+      - Minio__SecretKey=minioadmin
+      - Mail__Host=mailhog
+      - Mail__Port=1025
+      - Seq__ServerUrl=http://seq:5341
+      - NationalId__ActiveProvider=Mock
+      - Otp__ActiveProvider=Console
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sheba
+      POSTGRES_USER: sheba
+      POSTGRES_PASSWORD: sheba_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheba"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO Console UI
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"   # SMTP — API sends emails here
+      - "8025:8025"   # Web UI — view sent emails at http://localhost:8025
+    restart: unless-stopped
+
+  seq:
+    image: datalust/seq:latest
+    environment:
+      ACCEPT_EULA: Y
+    ports:
+      - "5341:5341"   # Ingestion (Serilog sink target)
+      - "8081:80"     # Web UI — view structured logs at http://localhost:8081
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Http" />
+    <PackageReference Include="FluentValidation.AspNetCore" />
+    <PackageReference Include="Mapster" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Seq" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Identity\Sheba.Identity.Infrastructure\Sheba.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Citizen\Sheba.Citizen.Infrastructure\Sheba.Citizen.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Ministry\Sheba.Ministry.Infrastructure\Sheba.Ministry.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\ServiceRequest\Sheba.ServiceRequest.Infrastructure\Sheba.ServiceRequest.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Document\Sheba.Document.Infrastructure\Sheba.Document.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Wallet\Sheba.Wallet.Infrastructure\Sheba.Wallet.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Notification\Sheba.Notification.Infrastructure\Sheba.Notification.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Payment\Sheba.Payment.Infrastructure\Sheba.Payment.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Audit\Sheba.Audit.Infrastructure\Sheba.Audit.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Admin\Sheba.Admin.Infrastructure\Sheba.Admin.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
+
