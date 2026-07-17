@@ -6,9 +6,10 @@
 ## 1. Authentication flows
 
 - **Citizen:** password (Argon2id) + mandatory SMS OTP via the custom OpenIddict grant
-  `urn:sheba:grant:national_id_otp`; browser SSO via `/connect/authorize` + PKCE
-  ([sheba.md §6.3](sheba.md#63-login-flow-password--sms-otp)). OAuth 2.1 alignment: no implicit,
-  no password grant, PKCE required for public clients.
+  `urn:sheba:grant:national_id_otp`; browser SSO via `/connect/authorize` + PKCE ([sheba.md
+  §6.3](sheba.md#63-login-flow-password--sms-otp), consent flow [§6.10](sheba.md#610-browser-authorization-code--pkce-flow-with-consent-t-oidc-1)
+  — **T-OIDC-1** closed). OAuth 2.1 alignment: no implicit, no password grant, PKCE required for
+  public clients.
 - **Admin:** separate `AdminUser` principal, password + TOTP once enrolled (secret stored
   encrypted, AES-256-GCM; self-service enrollment + recovery codes, [sheba.md
   §6.9](sheba.md#69-admin-totp-enrollment--mfa-gate-t-sec-1) — **T-SEC-1** closed), `admin_api`

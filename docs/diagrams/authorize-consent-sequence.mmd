@@ -1,0 +1,39 @@
+%% Sheba — browser authorization-code + PKCE flow with civil_data consent (T-OIDC-1)
+%% docs/sheba.md §6.10
+sequenceDiagram
+    autonumber
+    actor C as Citizen
+    participant P as Portal (RP: sheba-portal)
+    participant OIDC as Sheba.Api /connect/authorize
+    participant CON as Sheba.Api /connect/consent
+    participant REDIS as Redis (consent marker)
+    participant DB as identity schema
+
+    Note over C,P: Citizen already holds a bearer token (password + OTP, existing flow)
+    P->>OIDC: POST /api/identity/session/establish (Bearer token)
+    OIDC-->>P: Set-Cookie: sheba_session (bridges bearer → browser session)
+
+    P->>OIDC: GET /connect/authorize?...&code_challenge=...&scope=openid+profile+civil_data
+    OIDC->>OIDC: cookie present? no → redirect to portal login (not shown, assumed done above)
+    OIDC->>OIDC: loa claim on cookie ≥ 2?
+    alt loa < 2
+        OIDC-->>P: redirect to redirect_uri?error=invalid_scope
+    end
+    OIDC->>REDIS: consent marker for (subject, client, civil_data)?
+    alt no marker yet
+        OIDC-->>P: redirect to /connect/consent?{same query}
+        P->>CON: GET /connect/consent?{query}
+        CON-->>P: minimal HTML "Allow sheba-portal to access civil_data?"
+        C->>P: clicks Allow
+        P->>CON: POST /connect/consent/decide (decision=allow, query)
+        CON->>REDIS: SET marker (2 min TTL)
+        CON-->>P: redirect back to /connect/authorize?{same query}
+        P->>OIDC: GET /connect/authorize?{same query}
+        OIDC->>REDIS: marker found → DELETE (one-time use)
+    end
+    OIDC->>DB: OpenIddict issues + stores the authorization code (PKCE code_challenge attached)
+    OIDC-->>P: redirect to redirect_uri?code=...&state=...
+
+    P->>OIDC: POST /connect/token (grant_type=authorization_code, code, code_verifier)
+    OIDC->>OIDC: OpenIddict validates code + PKCE + redirect_uri internally
+    OIDC-->>P: access_token + id_token (+ refresh_token if offline_access), scope includes civil_data

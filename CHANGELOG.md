@@ -7,6 +7,32 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Browser authorization-code + PKCE flow with civil_data consent (T-OIDC-1)**: `/connect/authorize`
+  now has a real handler (`AuthorizeEndpoints`) behind the passthrough that was enabled but unused
+  since Phase 0. A new, non-default cookie scheme (`SheebaSessionScheme`) backs the browser-redirect
+  session, bridged from an existing bearer token via `POST /api/identity/session/establish` — no
+  new login UI duplicates the existing password+OTP flow. `civil_data` in the requested scopes
+  gates on the cookie's `loa` claim ≥ 2 (OAuth-shaped `invalid_scope` redirect if not) and, unless
+  already consented in this round-trip, redirects to a minimal server-rendered `/connect/consent`
+  page — the one place this API-first backend renders HTML directly, since nothing else in the
+  repo exists to redirect to for it. The Allow/Deny decision travels back via a 2-minute one-time
+  Redis marker (mirroring `MinistryWebhookVerifier`'s dedup pattern) rather than a persisted
+  authorization-record store — consent is not remembered across sessions in this pass (T-OIDC-2
+  tracks bringing the authorize flow's refresh tokens under T-SEC-9's family-reuse tracking, which
+  this change didn't extend to). `urn:sheba:grant:national_id_otp` no longer defaults `civil_data`
+  into its granted scopes and now enforces the same LoA ≥ 2 gate without the consent step (a
+  first-party grant isn't the third-party trust decision consent exists for).
+
+  **Verified live end-to-end** against a running instance with real HTTP requests (register →
+  admin-approve → login → PKCE authorize → consent → token exchange), not just unit tests — this
+  caught a real gap during development: `/connect/token` had no `authorization_code` grant branch
+  at all (only the two custom grants + `refresh_token`), so the consent/PKCE plumbing was correct
+  but nothing could actually redeem the code it produced. Fixed by adding
+  `IssueFromAuthorizationCodeAsync` to `OidcEndpoints.HandleTokenAsync`. Confirmed: cookie-less
+  request redirects to the configured portal login URL; `openid profile` (no civil_data) issues a
+  code directly and completes a full PKCE token exchange; `civil_data` at LoA 1 redirects to the
+  RP with `error=invalid_scope`; `civil_data` at LoA 2 walks the full consent round-trip and the
+  resulting token's `scope` correctly includes `civil_data`.
 - **Refresh-token family reuse detection (T-SEC-9)**: `RefreshTokenFamily` is wired into the
   actual token-issuance path for the first time. `OidcEndpoints` attaches an internal
   `family_id`/`family_generation` claim pair (no token destination — never appears in the JWT

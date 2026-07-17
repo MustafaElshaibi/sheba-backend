@@ -85,7 +85,12 @@ redirect-URI allowlist (exact match).
 **BR-RP-2** Public clients (SPA/mobile) use PKCE; no client secrets. Confidential clients rotate
 secrets on demand.
 **BR-RP-3** `civil_data`-class scopes require explicit citizen consent at the authorize prompt,
-per RP, revocable.
+gated on LoA ≥ 2 (T-OIDC-1, [sheba.md §6.10](sheba.md#610-browser-authorization-code--pkce-flow-with-consent-t-oidc-1)).
+Consent is **not yet persisted** across sessions — every `civil_data` authorize request re-prompts,
+which is more conservative than "revocable" implies but isn't the same thing; a citizen has
+nothing to revoke because nothing is remembered past the single redirect round-trip. Sheba's own
+first-party custom grant (§6.3) skips the prompt (not a third-party trust decision) but still
+enforces the LoA ≥ 2 gate.
 **BR-RP-4** Sheba's own portal (`sheba-portal`) and admin dashboard (`sheba-admin`) are ordinary
 registered RPs.
 

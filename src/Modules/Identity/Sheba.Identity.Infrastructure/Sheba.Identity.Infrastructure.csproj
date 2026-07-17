@@ -21,6 +21,7 @@
     <PackageReference Include="OpenIddict.AspNetCore" />
     <PackageReference Include="OpenIddict.EntityFrameworkCore" />
     <PackageReference Include="Otp.NET" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Twilio" />
   </ItemGroup>
 

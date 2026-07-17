@@ -657,6 +657,90 @@ consecutive invalid MFA attempts lock the second factor for `2^(n-4)` minutes �
 exponential formula BR-LG-3 uses for password lockout, applied to the new attack surface a
 brute-forceable 6-digit code introduces.
 
+### 6.10 Browser authorization-code + PKCE flow with consent (T-OIDC-1)
+
+Source: [diagrams/authorize-consent-sequence.mmd](diagrams/authorize-consent-sequence.mmd)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Citizen
+    participant P as Portal (RP: sheba-portal)
+    participant OIDC as Sheba.Api /connect/authorize
+    participant CON as Sheba.Api /connect/consent
+    participant REDIS as Redis (consent marker)
+    participant DB as identity schema
+
+    Note over C,P: Citizen already holds a bearer token (password + OTP, existing flow)
+    P->>OIDC: POST /api/identity/session/establish (Bearer token)
+    OIDC-->>P: Set-Cookie: sheba_session (bridges bearer → browser session)
+
+    P->>OIDC: GET /connect/authorize?...&code_challenge=...&scope=openid+profile+civil_data
+    OIDC->>OIDC: cookie present? no → redirect to portal login (not shown, assumed done above)
+    OIDC->>OIDC: loa claim on cookie ≥ 2?
+    alt loa < 2
+        OIDC-->>P: redirect to redirect_uri?error=invalid_scope
+    end
+    OIDC->>REDIS: consent marker for (subject, client, civil_data)?
+    alt no marker yet
+        OIDC-->>P: redirect to /connect/consent?{same query}
+        P->>CON: GET /connect/consent?{query}
+        CON-->>P: minimal HTML "Allow sheba-portal to access civil_data?"
+        C->>P: clicks Allow
+        P->>CON: POST /connect/consent/decide (decision=allow, query)
+        CON->>REDIS: SET marker (2 min TTL)
+        CON-->>P: redirect back to /connect/authorize?{same query}
+        P->>OIDC: GET /connect/authorize?{same query}
+        OIDC->>REDIS: marker found → DELETE (one-time use)
+    end
+    OIDC->>DB: OpenIddict issues + stores the authorization code (PKCE code_challenge attached)
+    OIDC-->>P: redirect to redirect_uri?code=...&state=...
+
+    P->>OIDC: POST /connect/token (grant_type=authorization_code, code, code_verifier)
+    OIDC->>OIDC: OpenIddict validates code + PKCE + redirect_uri internally
+    OIDC-->>P: access_token + id_token (+ refresh_token if offline_access), scope includes civil_data
+```
+
+`/connect/authorize` (`AuthorizeEndpoints`) sits behind the `EnableAuthorizationEndpointPassthrough()`
+already configured for OpenIddict — PKCE itself needs no custom code: `RequireProofKeyForCodeExchange()`
+makes OpenIddict validate `code_challenge`/`code_verifier` in its own pipeline before and after this
+passthrough runs. What this endpoint adds is everything OAuth leaves to the authorization server's
+own policy:
+
+- **Session**: a separate, non-default cookie scheme (`SheebaSessionScheme`) distinct from the
+  Bearer/OpenIddict-validation scheme every API call uses — naming it explicitly means no API
+  caller is affected by its existence. `POST /api/identity/session/establish` bridges an existing
+  bearer token (from the citizen's normal password+OTP login) into this cookie, since the browser
+  redirect flow has no Authorization header to read. Not authenticated → redirect to the portal's
+  login page (`Identity:PortalLoginUrl`) with a `return_url` back to the original request.
+- **LoA gate**: `civil_data` in the requested scopes requires the cookie's `loa` claim ≥ 2, checked
+  before anything else — an OAuth-shaped `error=invalid_scope` redirect to the RP's `redirect_uri`
+  if not, never a bare 403 (an OIDC/OAuth error must reach the RP through its own channel, not a
+  page the citizen's browser renders directly).
+- **Consent**: a minimal server-rendered HTML prompt — deliberately the one place in this
+  API-first backend that renders a page directly, because nothing else in the system exists to
+  redirect to for it. Consent isn't persisted across sessions (no authorization-record store,
+  no "remember forever"): a 2-minute one-time Redis marker (`sheba:consent:{subject}:{client}:civil_data`,
+  mirroring the dedup pattern `MinistryWebhookVerifier` already uses) carries the decision from
+  `POST /connect/consent/decide` back through a second pass of `/connect/authorize`, which is the
+  only place actually able to call `Results.SignIn` against the OpenIddict authorization request
+  (`/connect/consent` isn't a registered OpenIddict endpoint URI, so it has no such context).
+  Denying redirects straight to the RP's `redirect_uri` with `error=access_denied` — never back
+  through `/connect/authorize`, so a declined consent can't be retried by reloading.
+- **First-party custom grant**: `urn:sheba:grant:national_id_otp` (§6.3) no longer defaults
+  `civil_data` into its granted scopes — a caller must request it explicitly, and it's still
+  refused below LoA 2 (`invalid_scope`). It does **not** run the consent step: `sheba-portal`
+  using its own first-party grant isn't the "should a third party see this" decision consent
+  exists for.
+
+Verified live end-to-end against a running instance (not just unit-tested): cookie bridge → code
+issued directly for `openid profile` → PKCE-verified token exchange; `civil_data` at LoA 1 →
+`invalid_scope` redirect; `civil_data` at LoA 2 → consent redirect → Allow → code → token with
+`civil_data` in its granted scope; no cookie → redirect to the configured login URL. This caught a
+real gap during development: `/connect/token` had no `authorization_code` grant branch at all
+(only the two custom grants + refresh_token) — the consent/PKCE plumbing was correct but nothing
+could redeem the code it produced until that branch was added.
+
 ---
 
 ## 7. Ministry Integration Framework

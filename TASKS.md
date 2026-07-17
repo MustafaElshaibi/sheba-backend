@@ -77,7 +77,7 @@ row in known-issues §1 by the same ID.
 - [ ] Password reset flow (OTP-gated) + account recovery rules in
       [docs/business-rules.md](docs/business-rules.md).
 - [ ] RP secret rotation endpoint + consent screen copy for `civil_data`.
-- [ ] **T-OIDC-1** Implement `/connect/authorize` + consent *(High · L · deps: T-AUTH-2 ·
+- [x] **T-OIDC-1** Implement `/connect/authorize` + consent *(High · L · deps: T-AUTH-2 ·
       issue: T-OIDC-1; pairs with the consent-screen bullet above)*: authorization-code + PKCE
       handler behind the already-enabled passthrough; login redirect for unauthenticated users;
       consent prompt for `civil_data` gated on LoA ≥ 2; stop defaulting `civil_data` into the
@@ -85,6 +85,12 @@ row in known-issues §1 by the same ID.
       AC: an external RP completes code+PKCE end-to-end against the seeded `sheba-portal` client;
       `civil_data` is granted only after recorded consent at LoA ≥ 2; `/connect/*` responses stay
       OIDC-spec-shaped (JSend-exempt).
+- [ ] **T-OIDC-2** Family-reuse tracking for authorize-flow refresh tokens *(Low · S · deps:
+      T-OIDC-1 ✓, T-SEC-9 ✓ · issue: T-OIDC-2)*: attach `family_id`/`family_generation` claims in
+      `AuthorizeEndpoints.IssueAuthorizationCode` the same way the two custom grants already do, so
+      a stolen refresh token from the browser PKCE flow also gets cascade-revoked on reuse.
+      AC: a refresh token minted via `/connect/authorize` behaves identically to one from the
+      custom grants under `RotateRefreshTokenFamilyHandler`.
 - [ ] **T-ID-1** Account lifecycle completion *(High · M · deps: T-AUTH-2 · issue: T-ID-1)*:
       `Suspend`/`Reinstate`/`Deactivate` on the `Account` aggregate + admin endpoints (audited,
       citizen notified); persist the rejection reason; re-application path for Rejected accounts

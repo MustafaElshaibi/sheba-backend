@@ -67,6 +67,9 @@ public static class OidcEndpoints
         if (request.GrantType == ShebaAdminGrantType)
             return await IssueAdminTokenAsync(request, mediator);
 
+        if (request.IsAuthorizationCodeGrantType())
+            return await IssueFromAuthorizationCodeAsync(context);
+
         if (request.IsRefreshTokenGrantType())
             return await IssueFromRefreshTokenAsync(context, mediator);
 
@@ -120,11 +123,20 @@ public static class OidcEndpoints
 
         var principal = new ClaimsPrincipal(identity);
 
-        // Grant the standard OIDC scopes (plus offline_access for a refresh token).
+        // Grant the standard OIDC scopes (plus offline_access for a refresh token). civil_data is
+        // NOT defaulted in (T-OIDC-1) — a client must explicitly request it, and even then it's
+        // only granted at LoA ≥ 2. The browser authorize+PKCE flow (AuthorizeEndpoints) is the
+        // only path that additionally requires a recorded consent decision for it; this
+        // first-party custom grant only gates on LoA, since sheba-portal is Sheba's own app, not
+        // a third-party RP the citizen is being asked to trust with a share decision.
         var requested = request.GetScopes();
         var scopes = requested.Length > 0
             ? (IEnumerable<string>)requested
-            : new[] { Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess, "civil_data" };
+            : new[] { Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess };
+
+        if (scopes.Contains("civil_data") && result.Value.IdentityLevel < 2)
+            return TokenError(Errors.InvalidScope, "civil_data requires Level of Assurance 2 or higher.");
+
         principal.SetScopes(scopes);
         SetDestinationsForAll(principal);
         await AttachRefreshFamilyClaimsAsync(identity, principal, result.Value.AccountId, request.ClientId, mediator);
@@ -168,6 +180,22 @@ public static class OidcEndpoints
         SetDestinationsForAll(principal);
         await AttachRefreshFamilyClaimsAsync(identity, principal, result.Value.AdminId, request.ClientId, mediator);
 
+        return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    // authorization_code — the browser PKCE flow (T-OIDC-1, AuthorizeEndpoints). OpenIddict has
+    // already validated the code, PKCE code_verifier, and redirect_uri in its own pipeline before
+    // this passthrough runs; this just re-signs the principal AuthorizeEndpoints originally
+    // signed in during /connect/authorize.
+    private static async Task<IResult> IssueFromAuthorizationCodeAsync(HttpContext context)
+    {
+        var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+
+        if (result.Principal is null)
+            return TokenError(Errors.InvalidGrant, "The authorization code is no longer valid.");
+
+        var principal = result.Principal;
+        SetDestinationsForAll(principal);
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 

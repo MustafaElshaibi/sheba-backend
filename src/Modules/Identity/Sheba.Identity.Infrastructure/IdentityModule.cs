@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -231,11 +233,32 @@ public static class IdentityModule
         // Make OpenIddict validation the default authN/challenge scheme. Without this,
         // RequireAuthorization on any endpoint throws "No authenticationScheme was specified"
         // (500) instead of challenging with a 401 the moment an anonymous caller shows up.
+        //
+        // Also registers a SEPARATE, non-default cookie scheme (T-OIDC-1) used only by the
+        // browser-redirect /connect/authorize flow — API callers are unaffected since it's never
+        // the default scheme; only code that explicitly names AuthorizeEndpoints.SheebaSessionScheme
+        // (the session-establish bridge below, and AuthorizeEndpoints itself) ever touches it.
         services.AddAuthentication(options =>
         {
             options.DefaultScheme          = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
             options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+        })
+        .AddCookie(Oidc.AuthorizeEndpoints.SheebaSessionScheme, options =>
+        {
+            options.Cookie.Name = "sheba_session";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax; // must survive the RP's top-level redirect
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // dev runs over plain HTTP
+            options.ExpireTimeSpan = TimeSpan.FromDays(30); // matches the refresh-token/SSO session window
+            options.SlidingExpiration = true;
+            // No LoginPath redirect — AuthorizeEndpoints handles "not authenticated" itself and
+            // this scheme is never challenged directly.
+            options.Events.OnRedirectToLogin = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
         });
 
         return services;
@@ -330,6 +353,28 @@ public static class IdentityModule
         })
         .WithName("RequestLoaUpgrade")
         .WithSummary("Request a Level-of-Assurance upgrade (LoA 2/3) for your own account — enters the admin review queue.");
+
+        // ── Session bridge for the browser /connect/authorize flow (T-OIDC-1) ──
+        // Any authenticated principal (bearer token) — not policy-restricted to citizens, since
+        // nothing here is citizen-specific; it only re-issues whatever claims the caller already
+        // proved. Separate group from citizenAuthed above because its RequireAuthorization()
+        // (default scheme, no policy) differs from citizenAuthed's CitizenOnly policy.
+        var sessionBridge = app.MapGroup("/api/identity/session").WithTags("Identity — Session")
+            .RequireAuthorization()
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        sessionBridge.MapPost("/establish", async (HttpContext context, ClaimsPrincipal user) =>
+        {
+            // Re-issues the caller's already-validated bearer claims as a browser cookie —
+            // bridges the existing API-based login (password + OTP, custom grant) to the
+            // cookie-based session /connect/authorize needs for the browser-redirect PKCE flow.
+            // No new authentication happens here; RequireAuthorization above already proved it.
+            var identity = new ClaimsIdentity(user.Claims, Oidc.AuthorizeEndpoints.SheebaSessionScheme);
+            await context.SignInAsync(Oidc.AuthorizeEndpoints.SheebaSessionScheme, new ClaimsPrincipal(identity));
+            return Results.Ok(new { established = true });
+        })
+        .WithName("EstablishSession")
+        .WithSummary("Bridges an existing bearer token into a browser session cookie for /connect/authorize SSO.");
 
         // ── Admin self-service MFA (T-SEC-1) ──────────────────────────────────
         // AnyAdmin, not a specific role — every admin manages their own second factor regardless
