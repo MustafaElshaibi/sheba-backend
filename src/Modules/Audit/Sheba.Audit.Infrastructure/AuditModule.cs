@@ -60,6 +60,7 @@ public static class AuditModule
     {
         var group = app.MapGroup("/api/admin/audit")
             .WithTags("Audit")
+            .RequireAuthorization("Auditor") // T-AUTH-2 — append-only audit trail, SuperAdmin/Auditor only
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         group.MapGet("/", async (

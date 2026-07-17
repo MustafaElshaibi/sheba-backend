@@ -1,4 +1,4 @@
-namespace Sheba.Ministry.Domain.Interfaces;
+namespace Sheba.Shared.Kernel.Interfaces;
 
 /// <summary>
 /// Outcome of verifying an inbound ministry webhook. Anything other than <see cref="Valid"/>
@@ -24,9 +24,9 @@ public sealed record WebhookVerificationResult(WebhookVerificationStatus Status,
 /// Verifies inbound ministry webhooks per the Sheba webhook contract (§7.4): constant-time
 /// HMAC-SHA256 signature check, a ±5-minute timestamp window, and delivery-id de-duplication.
 ///
-/// This is a Ministry-owned port because the module owns the per-ministry signing secret (stored
-/// encrypted) and the credential encryptor. ServiceRequest — which receives the HTTP callback —
-/// depends only on this interface, keeping the secret and the crypto inside the Ministry boundary.
+/// Declared in Shared.Kernel (not Ministry.Domain) because ServiceRequest — which receives the
+/// HTTP callback — depends only on this interface (T-ARC-1); the per-ministry signing secret and
+/// its decryption stay inside the Ministry.Infrastructure implementation.
 ///
 /// Verification order is fixed: signature → timestamp window → delivery-id dedup → (caller
 /// proceeds). The timestamp is part of the signed payload, so it is read first but its freshness

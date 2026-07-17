@@ -20,6 +20,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<IdentityRequest> IdentityRequests => Set<IdentityRequest>();
     public DbSet<OtpRecord> OtpRecords => Set<OtpRecord>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<AdminRecoveryCode> AdminRecoveryCodes => Set<AdminRecoveryCode>();
     public DbSet<RelyingParty> RelyingParties => Set<RelyingParty>();
     public DbSet<RpRedirectUri> RpRedirectUris => Set<RpRedirectUri>();
     public DbSet<RpScope> RpScopes => Set<RpScope>();

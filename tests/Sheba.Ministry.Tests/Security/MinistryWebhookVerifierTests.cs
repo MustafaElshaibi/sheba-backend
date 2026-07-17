@@ -6,6 +6,7 @@ using NSubstitute;
 using Sheba.Ministry.Domain.Entities;
 using Sheba.Ministry.Domain.Interfaces;
 using Sheba.Ministry.Infrastructure.Security;
+using Sheba.Shared.Kernel.Interfaces;
 using StackExchange.Redis;
 
 namespace Sheba.Ministry.Tests.Security;

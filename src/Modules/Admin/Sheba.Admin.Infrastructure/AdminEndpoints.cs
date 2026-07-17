@@ -19,6 +19,7 @@ internal static class AdminEndpoints
     {
         var group = app.MapGroup("/api/admin")
             .WithTags("Admin")
+            .RequireAuthorization("AnyAdmin") // T-AUTH-2 — KPIs/trends/reports are admin-dashboard data
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── Analytics KPIs ─────────────────────────────────────────────────────

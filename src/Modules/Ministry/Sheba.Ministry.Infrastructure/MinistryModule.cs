@@ -79,6 +79,10 @@ public static class MinistryModule
         services.AddScoped<IMinistryAuthAdapter, BearerTokenMinistryAuthAdapter>();
         services.AddScoped<IMinistryAuthAdapter, BasicAuthMinistryAuthAdapter>();
 
+        // ── 5. Cross-module call port — ServiceRequest invokes ministry endpoints via this,
+        // never via Sheba.Ministry.Domain/Infrastructure directly (T-ARC-1) ──────
+        services.AddScoped<IMinistryCallPort, MinistryCallPortAdapter>();
+
         return services;
     }
 

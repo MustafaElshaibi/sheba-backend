@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
-using Sheba.Identity.Domain.DomainEvents;
+using Sheba.Shared.Kernel.Events.IntegrationEvents;
 using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.Identity.Application.EventHandlers;

@@ -116,6 +116,18 @@ public sealed class IdentityRepository(IdentityDbContext db) : IIdentityReposito
     public async Task<AdminUser?> FindAdminByIdAsync(Guid adminId, CancellationToken ct = default)
         => await db.AdminUsers.FirstOrDefaultAsync(a => a.Id == adminId, ct);
 
+    // ── AdminRecoveryCode ────────────────────────────────────────────────────
+    public async Task AddAdminRecoveryCodesAsync(IEnumerable<AdminRecoveryCode> codes, CancellationToken ct = default)
+        => await db.AdminRecoveryCodes.AddRangeAsync(codes, ct);
+
+    public async Task<List<AdminRecoveryCode>> GetUnusedAdminRecoveryCodesAsync(
+        Guid adminUserId, CancellationToken ct = default)
+    {
+        return await db.AdminRecoveryCodes
+                       .Where(c => c.AdminUserId == adminUserId && c.UsedAt == null)
+                       .ToListAsync(ct);
+    }
+
     // ── Unit of Work ─────────────────────────────────────────────────────────
     public async Task<int> SaveChangesAsync(CancellationToken ct = default)
         => await db.SaveChangesAsync(ct);

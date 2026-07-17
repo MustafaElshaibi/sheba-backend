@@ -47,31 +47,35 @@ public static class DocumentModule
 
     public static WebApplication MapDocumentEndpoints(this WebApplication app)
     {
+        // Every operation here acts on a citizen-owned resource — the whole group requires an
+        // authenticated principal (T-AUTH-2); ownership itself comes from the token "sub", never
+        // a caller-supplied id, and is enforced per-endpoint below (BR-DO-1).
         var docs = app.MapGroup("/api/documents").WithTags("Documents")
+            .RequireAuthorization()
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── Upload (multipart/form-data) ──────────────────────────────────────
         docs.MapPost("/", async (
-            IFormFile file, Guid ownerId, string? documentType,
+            IFormFile file, string? documentType, System.Security.Claims.ClaimsPrincipal user,
             IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(
-                new UploadDocumentCommand(ownerId, file, documentType ?? "GENERAL"), ct);
+                new UploadDocumentCommand(user.RequireSubjectId(), file, documentType ?? "GENERAL"), ct);
             return Results.Created($"/api/documents/{result.DocumentId}", result);
         })
         .DisableAntiforgery()
         .WithName("UploadDocument")
-        .WithSummary("Upload a document (JPEG/PNG/WebP/PDF, max 10 MB) to MinIO storage.");
+        .WithSummary("Upload a document (JPEG/PNG/WebP/PDF, max 10 MB) to MinIO storage, owned by the caller.");
 
         // ── List my documents ─────────────────────────────────────────────────
-        docs.MapGet("/mine/{ownerId:guid}", async (
-            Guid ownerId, IMediator mediator, CancellationToken ct) =>
+        docs.MapGet("/mine", async (
+            System.Security.Claims.ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetMyDocumentsQuery(ownerId), ct);
+            var result = await mediator.Send(new GetMyDocumentsQuery(user.RequireSubjectId()), ct);
             return Results.Ok(result);
         })
         .WithName("GetMyDocuments")
-        .WithSummary("List all documents owned by a citizen.");
+        .WithSummary("List all documents owned by the calling citizen.");
 
         // ── Presigned download URL ────────────────────────────────────────────
         docs.MapGet("/{id:guid}/download-url", async (
@@ -84,19 +88,20 @@ public static class DocumentModule
                 new GetDocumentDownloadUrlQuery(id, user.RequireSubjectId(), isAdmin), ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
-        .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
         .WithName("GetDocumentDownloadUrl")
         .WithSummary("Generate a presigned MinIO download URL (valid 15 minutes).");
 
         // ── Delete ────────────────────────────────────────────────────────────
         docs.MapDelete("/{id:guid}", async (
-            Guid id, IMediator mediator, CancellationToken ct) =>
+            Guid id, System.Security.Claims.ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new DeleteDocumentCommand(id), ct);
+            var isAdmin = user.GetRole() != "Citizen";
+            var result = await mediator.Send(
+                new DeleteDocumentCommand(id, user.RequireSubjectId(), isAdmin), ct);
             return Results.Ok(result);
         })
         .WithName("DeleteDocument")
-        .WithSummary("Delete a document from MinIO and mark metadata deleted.");
+        .WithSummary("Delete a document (owner or admin only) from MinIO and mark metadata deleted.");
 
         return app;
     }

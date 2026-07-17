@@ -1,19 +1,25 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
+using Sheba.Identity.Domain.Entities;
+using Sheba.Identity.Domain.Interfaces;
 using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.LoginAdmin;
 
 /// <summary>
-/// Verifies admin credentials. Ordering mirrors LoginCitizenHandler's anti-enumeration fix
-/// (password proven before anything account-specific is disclosed) — the audience here is
-/// internal, but the same probing risk applies to any password endpoint reachable over HTTP.
+/// Verifies admin credentials, then — for admins who have completed TOTP enrollment (T-SEC-1) —
+/// a second factor. Ordering mirrors LoginCitizenHandler's anti-enumeration fix (password proven
+/// before anything account-specific is disclosed); the MFA step only runs after that, so
+/// revealing "a code is required" here never discloses more than the caller already proved by
+/// supplying a correct password.
 /// </summary>
 public sealed class LoginAdminHandler(
     IIdentityRepository repository,
     IPasswordHasher passwordHasher,
+    ITotpService totpService,
+    IMfaSecretEncryptor mfaSecretEncryptor,
     ILogger<LoginAdminHandler> logger
 ) : IRequestHandler<LoginAdminCommand, Result<LoginAdminResponse>>
 {
@@ -46,6 +52,13 @@ public sealed class LoginAdminHandler(
             return Fail();
         }
 
+        if (admin.MfaEnabled)
+        {
+            var mfaFailure = await VerifyMfaAsync(admin, request.MfaCode, ct);
+            if (mfaFailure is not null)
+                return mfaFailure;
+        }
+
         admin.RecordLogin();
         await repository.SaveChangesAsync(ct);
 
@@ -58,6 +71,53 @@ public sealed class LoginAdminHandler(
             Email: admin.Email));
     }
 
+    /// <summary>Returns null when the second factor checks out; otherwise the failure to return.</summary>
+    private async Task<Result<LoginAdminResponse>?> VerifyMfaAsync(
+        AdminUser admin, string? mfaCode, CancellationToken ct)
+    {
+        if (admin.IsMfaLocked())
+        {
+            logger.LogWarning("[LoginAdmin] MFA locked for AdminId={AdminId}", admin.Id);
+            return FailMfa("mfa", "Too many invalid codes. Please try again later.");
+        }
+
+        if (string.IsNullOrWhiteSpace(mfaCode))
+            return FailMfa("mfa_required", "A verification code is required.");
+
+        var normalized = AdminRecoveryCode.Normalize(mfaCode);
+        var isTotpShaped = normalized.Length == 6 && normalized.All(char.IsDigit);
+
+        var verified = isTotpShaped
+            ? totpService.VerifyCode(mfaSecretEncryptor.Decrypt(admin.MfaSecret!), normalized)
+            : await TryConsumeRecoveryCodeAsync(admin.Id, normalized, ct);
+
+        if (!verified)
+        {
+            admin.RecordFailedMfaAttempt();
+            await repository.SaveChangesAsync(ct);
+            logger.LogWarning("[LoginAdmin] Invalid MFA code for AdminId={AdminId}", admin.Id);
+            return FailMfa("mfa", "Invalid verification code.");
+        }
+
+        admin.ResetMfaFailures();
+        return null;
+    }
+
+    private async Task<bool> TryConsumeRecoveryCodeAsync(Guid adminId, string normalizedCode, CancellationToken ct)
+    {
+        var unused = await repository.GetUnusedAdminRecoveryCodesAsync(adminId, ct);
+        var match = unused.FirstOrDefault(c => passwordHasher.Verify(normalizedCode, c.CodeHash));
+        if (match is null)
+            return false;
+
+        match.MarkUsed();
+        logger.LogWarning("[LoginAdmin] Recovery code consumed for AdminId={AdminId}", adminId);
+        return true;
+    }
+
     private static Result<LoginAdminResponse> Fail() =>
         Result.Failure<LoginAdminResponse>(Error.Validation("credentials", GenericCredentialError));
+
+    private static Result<LoginAdminResponse> FailMfa(string code, string message) =>
+        Result.Failure<LoginAdminResponse>(Error.Validation(code, message));
 }

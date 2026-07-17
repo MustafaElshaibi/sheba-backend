@@ -66,7 +66,7 @@ public static class OidcEndpoints
             return await IssueAdminTokenAsync(request, mediator);
 
         if (request.IsRefreshTokenGrantType())
-            return IssueFromRefreshToken(context);
+            return await IssueFromRefreshTokenAsync(context);
 
         return TokenError(Errors.UnsupportedGrantType, "The specified grant type is not supported.");
     }
@@ -167,10 +167,9 @@ public static class OidcEndpoints
     }
 
     // refresh_token — reuse the principal OpenIddict already validated; rotation is on by config
-    private static IResult IssueFromRefreshToken(HttpContext context)
+    private static async Task<IResult> IssueFromRefreshTokenAsync(HttpContext context)
     {
-        var result = context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme)
-            .GetAwaiter().GetResult();
+        var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
         if (result.Principal is null)
             return TokenError(Errors.InvalidGrant, "The refresh token is no longer valid.");

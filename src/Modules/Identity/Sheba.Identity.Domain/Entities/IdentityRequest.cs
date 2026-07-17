@@ -1,6 +1,7 @@
 using Sheba.Identity.Domain.DomainEvents;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Shared.Kernel.Entities;
+using Sheba.Shared.Kernel.Events.IntegrationEvents;
 using Sheba.Shared.Kernel.Exceptions;
 using System.Text.Json;
 

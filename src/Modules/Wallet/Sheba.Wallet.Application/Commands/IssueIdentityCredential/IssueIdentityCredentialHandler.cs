@@ -1,14 +1,14 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sheba.Identity.Application.Queries.GetAccountById;
 using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Wallet.Domain.Entities;
 using Sheba.Wallet.Domain.Interfaces;
 
 namespace Sheba.Wallet.Application.Commands.IssueIdentityCredential;
 
 public sealed class IssueIdentityCredentialHandler(
-    IMediator mediator,
+    ICitizenAccountQueryService citizenAccountQuery,
     IWalletRepository repository,
     ICredentialSigner signer,
     ILogger<IssueIdentityCredentialHandler> logger
@@ -31,15 +31,14 @@ public sealed class IssueIdentityCredentialHandler(
                 "Credential already issued.");
         }
 
-        // Fetch verified claims from the Identity module (cross-module via MediatR query)
-        var accountResult = await mediator.Send(new GetAccountByIdQuery(command.AccountId), ct);
-        if (accountResult.IsFailure)
-            throw new NotFoundException("Account", command.AccountId);
-        var account = accountResult.Value;
+        // Fetch verified claims from the Identity module via the Shared.Kernel query port (T-ARC-1)
+        // — no direct reference to Identity.Application/Domain.
+        var account = await citizenAccountQuery.GetAccountInfoAsync(command.AccountId, ct)
+            ?? throw new NotFoundException("Account", command.AccountId);
 
         // Build + RSA-sign the VC-JWT
         var claims = new IdentityCredentialClaims(
-            account.Id, account.MaskedNid, account.FullNameEn, account.FullNameAr, account.IdentityLevel);
+            account.AccountId, MaskNid(account.NationalId), account.FullNameEn, account.FullNameAr, account.IdentityLevel);
         var signed = signer.SignIdentityCredential(claims, Validity);
 
         // Ensure the issuer DID document exists (created once)
@@ -51,23 +50,28 @@ public sealed class IssueIdentityCredentialHandler(
         }
 
         // Ensure the citizen's subject DID document exists
-        var subjectDid = await repository.GetDidBySubjectAsync(account.Id, ct);
+        var subjectDid = await repository.GetDidBySubjectAsync(account.AccountId, ct);
         if (subjectDid is null)
         {
-            subjectDid = DidDocument.Create(signed.SubjectDid, signer.IssuerPublicKeyPem, account.Id);
+            subjectDid = DidDocument.Create(signed.SubjectDid, signer.IssuerPublicKeyPem, account.AccountId);
             await repository.AddDidAsync(subjectDid, ct);
         }
 
         // Store the credential
         var vc = VerifiableCredential.Issue(
-            account.Id, CredentialType, signed.IssuerDid, signed.SubjectDid,
+            account.AccountId, CredentialType, signed.IssuerDid, signed.SubjectDid,
             signed.Jwt, signed.ClaimsJson, signed.ExpiresAt);
         await repository.AddCredentialAsync(vc, ct);
         await repository.SaveChangesAsync(ct);
 
-        logger.LogInformation("[IssueIdentityCredential] Issued {Type} for account {Id}", CredentialType, account.Id);
+        logger.LogInformation("[IssueIdentityCredential] Issued {Type} for account {Id}", CredentialType, account.AccountId);
 
         return new IssueIdentityCredentialResponse(
             vc.Id, vc.CredentialType, vc.SubjectDid, vc.Jwt, "Digital Identity Credential issued.");
     }
+
+    private static string MaskNid(string nid) =>
+        nid.Length > 4
+            ? string.Concat(new string('*', nid.Length - 4), nid[^4..])
+            : "****";
 }

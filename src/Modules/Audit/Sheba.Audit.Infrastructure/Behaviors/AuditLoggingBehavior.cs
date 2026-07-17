@@ -17,8 +17,9 @@ namespace Sheba.Audit.Infrastructure.Behaviors;
 /// Captures:
 ///   - Actor ID from JWT "sub" claim
 ///   - IP address from HttpContext
-///   - JSON snapshot of the request payload
-///   - JSON snapshot of the response (on success)
+///   - Redacted JSON snapshot of the request payload (see <see cref="AuditSnapshotRedactor"/> —
+///     passwords, OTP/TOTP codes, national IDs, phone numbers, and tokens never reach the row)
+///   - Redacted JSON snapshot of the response (on success)
 ///   - Error message (on failure)
 ///
 /// Registered in Program.cs as the 4th pipeline behavior (after Transaction).
@@ -108,20 +109,9 @@ public sealed class AuditLoggingBehavior<TRequest, TResponse>(
         return httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
     }
 
-    private static string? SafeSerialize(object? value)
-    {
-        if (value is null) return null;
-        try
-        {
-            var json = JsonSerializer.Serialize(value, SnapshotOptions);
-            // Truncate to 4KB to avoid bloating the audit table
-            return json.Length > 4096 ? json[..4096] + "..." : json;
-        }
-        catch
-        {
-            return $"{{\"_error\":\"Serialization failed for {value.GetType().Name}\"}}";
-        }
-    }
+    /// <summary>Redacted, size-capped JSON snapshot — see <see cref="AuditSnapshotRedactor"/>.</summary>
+    private static string? SafeSerialize(object? value) =>
+        AuditSnapshotRedactor.Redact(value, SnapshotOptions);
 
     /// <summary>
     /// Attempts to extract entity type and ID from request/response via reflection.

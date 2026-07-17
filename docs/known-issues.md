@@ -6,22 +6,33 @@
 
 ## 1. Design-vs-code gaps (each has a TASKS.md item)
 
+Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) · **High** ·
+**Medium** · **Low**. Unmarked rows predate the classification.
+
 | ID | Gap | Impact | Where |
 |----|-----|--------|-------|
 | T-SEC-1 | Admin TOTP modeled (`mfa_secret`) but not enforced at login | Admin accounts are password-only | Identity module |
 | T-SEC-3 | Secrets via config/env; AES vault key has a derived dev fallback; dev signing certs even on production branch | Key compromise + no rotation story in practice | `IdentityModule.cs`, `AesGcmCredentialEncryptor.cs` |
 | T-SEC-4 | No signing-cert rotation procedure wired | JWKS rollover untested | Identity module |
 | T-SEC-6/7 | No DB-volume/column encryption for `form_data_json`; MinIO SSE off (T-DOC-2) | PII at rest relies on host security only | Postgres/MinIO deployment |
-| T-SRV-1 | Webhook verification lacks timestamp window + delivery-id dedup (HMAC only, partially) | Replay attacks possible on ministry callbacks | ServiceRequest webhook receiver |
-| T-SRV-2 | `JsonSchema.Net` referenced in old doc but **not in `Directory.Packages.props`** — dynamic form submissions are not schema-validated server-side | Invalid/malicious form payloads reach handlers | ServiceRequest |
 | T-PAY-1 | Payment Application layer is **empty** (entities + repo only; mock flow) | No real order/refund lifecycle; workflow coupled via direct command instead of `PaymentCompletedEvent` | `Modules/Payment` |
 | T-AUD-1..3 | Audit is a plain table: no INSERT-only grant, no hash chain, no partitioning | "Tamper-evident" is aspirational today | `Modules/Audit` |
-| T-AUTH-1 | Ministry-Admin per-ministry scoping only partially enforced | A MinistryManager could touch another ministry's data via some endpoints | Ministry/ServiceRequest admin endpoints |
+| T-AUTH-1 | Ministry-Admin per-ministry scoping not enforced (role policies exist on every group as of T-AUTH-2; the `ministry_id` ownership dimension does not) | A MinistryManager could touch another ministry's data via some endpoints | Ministry/ServiceRequest admin endpoints |
 | T-NOT-1 | `Notification`/`NotificationTemplate` entities are TODO stubs; sends are hardcoded strings | No bilingual templating | `Modules/Notification` |
 | T-ADM-1 | No projection rebuild for the BI read model | Lost/buggy projection = manual SQL repair | `Modules/Admin` |
 | T-TST-1..4 | Only ~2 real test classes (Identity); Ministry/ServiceRequest/Integration projects are placeholders | Regression safety near zero outside Identity | `tests/` |
 | T-INT-1/2 | No OpenCRVS adapter; no OTP provider failover | Single-provider risk | Identity adapters |
 | — | `EfUnitOfWork<T>` is now registered per module (T-EVT-1), but zero commands implement `ITransactionalCommand` yet | `TransactionBehavior` has a real `IUnitOfWork` to wrap with, but nothing opts in, so no handler runs inside an explicit transaction today | `Sheba.Api/Behaviors/TransactionBehavior.cs` |
+| T-OIDC-1 | **High** — `/connect/authorize` passthrough is enabled but no endpoint implements it: the browser authorization-code + PKCE flow ("Sign in with Sheba" for external RPs, §6.7) cannot complete; no consent screen exists; the custom NID+OTP grant defaults `civil_data` into the granted scopes without consent or the LoA ≥ 2 gate | External RP sign-in non-functional; consent model unenforced | `IdentityModule.cs`, `OidcEndpoints.cs` |
+| T-CIT-1 | **High** — Citizen module never materializes: no consumer handles `IdentityRequestDecidedEvent(approved)` to create the `CitizenProfile` (§5.2), and `MapCitizenEndpoints` maps nothing (`/api/citizens` absent) | Approved citizens never get a profile; documented API missing | `Modules/Citizen` |
+| T-ID-1 | **High** — Account lifecycle incomplete: no `Suspend`/`Reinstate`/`Deactivate` on the aggregate (§6.2 transitions and permission-matrix rows unimplementable); `Account.Reject` accepts a reason but never stores it; a Rejected or OTP-expired PendingVerification account permanently blocks its NID — re-registration hits the already-registered guard and no purge job or re-application path exists | Documented admin actions impossible; a citizen can be locked out of onboarding forever | `Account.cs`, `RegisterCitizenHandler`, missing purge job |
+| T-SRV-3 | **Medium** — Submission gates missing: `RequiredLoa`, eligibility, and required documents are never checked at submit (§5.4.1; form-schema validation T-SRV-2 is done, these are not); `ServiceRequestEntity` lifecycle methods enforce no transition guards; no citizen cancel endpoint; no SLA/`Expired` handling | Ineligible or under-assured requests enter workflows; state machine corruptible | `SubmitServiceRequestHandler`, `ServiceRequestEntity` |
+| T-SRV-4 | **Medium** — Step-engine gaps: `on_failure_step` is persisted but never consulted (§11.3 compensation unimplemented); unhandled step types fall through to an auto-complete handler and silently succeed; step executions are pre-created for every step at submit *and* created on demand in `ExecuteNextStep` (ambiguous "active step" resolution) | Misconfigured workflows complete without doing work; failure routing absent | `ExecuteNextStepHandler`, step handlers |
+| T-NOT-2 | **Medium** — Notification module owns no event consumers: identity emails are sent by handlers inside Identity.Application (§5.8 assigns them to Notification); no `ServiceRequestSubmitted`/`Completed` notifications exist at all; `NotificationRecord` is never written; `IEmailService`/`ISmsService` are duplicated in Notification.Domain | Citizens get no service-request notifications; no delivery log | `Modules/Notification`, `Identity.Application/EventHandlers` |
+| T-SEC-8 | **Medium** — OTP codes are generated inside `IOtpProvider.SendAsync` (which returns the raw code to the caller), contradicting §6.6's rule that generation/policy live in the application layer and providers only deliver | A provider swap can weaken OTP policy | `IOtpProvider.cs` + OTP adapters |
+| T-SEC-9 | **Medium** — `RefreshTokenFamily` is a dead entity: no reuse-detection or family-revocation code exists (§6.4 claims both); rotation relies on OpenIddict defaults only. Overlaps open decision §3.5 | Stolen-refresh-token family revocation absent | `RefreshTokenFamily.cs`, `OidcEndpoints.cs` |
+| T-WAL-1 | **Medium** — VC signing key is ephemeral when `Wallet:IssuerPrivateKeyPem` is unset: a fresh RSA key is generated per process, so previously issued credentials become unverifiable after a restart; no production fail-fast | Issued VCs silently invalidated | `RsaCredentialSigner.cs` |
+| T-MIN-1 | **Low** — No ministry seed data: the demo catalog references five hardcoded ministry GUIDs that exist in no table; `MinistryEndpoint.RateLimitPerMinute` is stored but never enforced on outbound calls | Seeded ministry-call workflows cannot resolve a ministry; per-endpoint limits inert | `ServiceRequestModule.SeedServiceCatalogAsync`, `MinistryCallStepHandler` |
 
 ## 2. Superseded decisions (do not resurrect)
 
@@ -46,6 +57,7 @@
    a legal requirement; confirm when a data-protection regime lands.
 5. **Refresh-token custom family table vs OpenIddict-native tracking** — `RefreshTokenFamily`
    duplicates part of what OpenIddict stores; decide single source when implementing T-SEC-4.
+   The implementation task for whichever mechanism wins is **T-SEC-9** (§1).
 6. **Push notifications** — brief lists email/SMS/push; push deferred until a mobile app exists.
 
 ## 4. Documentation notes

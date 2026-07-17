@@ -337,6 +337,41 @@ namespace Sheba.Identity.Infrastructure.Persistence.Migrations
                     b.ToTable("accounts", "identity");
                 });
 
+            modelBuilder.Entity("Sheba.Identity.Domain.Entities.AdminRecoveryCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("admin_user_id");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminUserId")
+                        .HasDatabaseName("ix_admin_recovery_codes_admin_user_id");
+
+                    b.ToTable("admin_recovery_codes", "identity");
+                });
+
             modelBuilder.Entity("Sheba.Identity.Domain.Entities.AdminUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -373,6 +408,22 @@ namespace Sheba.Identity.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
+
+                    b.Property<bool>("MfaEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("mfa_enabled");
+
+                    b.Property<int>("MfaFailedAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("mfa_failed_attempts");
+
+                    b.Property<DateTime?>("MfaLockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("mfa_locked_until");
 
                     b.Property<string>("MfaSecret")
                         .HasColumnType("text")

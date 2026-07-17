@@ -20,8 +20,24 @@ Everything here is prerequisite plumbing; no new features.
   in Identity; remaining modules stay exception-based until their own pass.
 - ~~Housekeeping: remove `Class1.cs` stubs (Citizen module)~~ Done; align README/quickstart still open.
 
+2026-07 code-audit additions, also closed:
+
+- ~~**T-STD-2** Housekeeping: stray `AdminUser` entity, Audit `Class1.cs` stubs, sync-over-async
+  refresh-token grant.~~ Done.
+- ~~**T-GW-1** CORS policy + correlation-ID middleware per §3.5.~~ Done.
+- ~~**T-AUD-4** Activate `AuditLoggingBehavior` in the MediatR pipeline with a redaction
+  allowlist.~~ Done.
+- ~~**T-AUTH-2** Authorization coverage on every route group (Wallet/Admin/Audit, plus a
+  previously-unguarded Document module gap found during the sweep); ownership from the JWT
+  `sub`, never a caller-supplied id.~~ Done.
+- ~~**T-ARC-1** Restore module boundaries: integration events relocated to Shared.Kernel;
+  `IPaymentOrderPort`/`IMinistryCallPort`/`IMinistryWebhookVerifier` ports replace direct
+  ServiceRequest→Payment/Ministry references; Admin/Wallet's illegal Domain refs removed.~~ Done
+  — zero cross-module `ProjectReference`s remain anywhere in the solution.
+
 **Exit:** all endpoints emit JSend; `docker compose up` from a clean volume migrates and seeds;
-kill -9 during a command loses no events; auth endpoints rate-limited.
+kill -9 during a command loses no events; auth endpoints rate-limited; every route group is
+authorization-guarded; audit trail active with PII redaction; module boundaries compiler-enforced.
 
 ## Phase 1 — Identity completion
 
@@ -36,8 +52,9 @@ code, verified by contract tests.
 
 ## Phase 2 — Integration depth
 
-- **T-SRV-1** Webhook timestamp window + delivery-id dedup completing the HMAC check.
-- **T-SRV-2** Server-side JSON-Schema validation of service form submissions (JsonSchema.Net).
+- ~~**T-SRV-1** Webhook timestamp window + delivery-id dedup completing the HMAC check.~~ Done.
+- ~~**T-SRV-2** Server-side JSON-Schema validation of service form submissions
+  (JsonSchema.Net).~~ Done.
 - **T-INT-1** OpenCRVS `INationalIdProvider` adapter (proves the second registry shape).
 - **T-INT-2** OTP provider failover ordering.
 - Ministry health dashboard wiring (`TestConnectionAsync` → Admin KPIs).

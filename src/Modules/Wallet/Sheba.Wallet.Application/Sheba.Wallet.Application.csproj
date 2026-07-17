@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sheba.Wallet.Domain\Sheba.Wallet.Domain.csproj" />
-    <ProjectReference Include="..\..\Identity\Sheba.Identity.Application\Sheba.Identity.Application.csproj" />
+    <ProjectReference Include="..\..\..\Sheba.Shared.Kernel\Sheba.Shared.Kernel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

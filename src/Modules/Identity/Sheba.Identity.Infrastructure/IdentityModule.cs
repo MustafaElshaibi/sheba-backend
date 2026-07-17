@@ -125,6 +125,10 @@ public static class IdentityModule
         // ── 5e. Cross-module stats — Admin module reads live KPI counts via this ──
         services.AddScoped<IIdentityStatsProvider, IdentityStatsAdapter>();
 
+        // ── 5f. Admin TOTP MFA (T-SEC-1 in progress) — both adapters are stateless ──
+        services.AddSingleton<Domain.Interfaces.IMfaSecretEncryptor, Security.AesGcmMfaSecretEncryptor>();
+        services.AddSingleton<Domain.Interfaces.ITotpService, Security.OtpNetTotpService>();
+
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssemblies(

@@ -61,6 +61,19 @@ internal sealed class AdminUserConfiguration : IEntityTypeConfiguration<AdminUse
         builder.Property(a => a.MfaSecret)
             .HasColumnName("mfa_secret");
 
+        builder.Property(a => a.MfaEnabled)
+            .HasColumnName("mfa_enabled")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(a => a.MfaFailedAttempts)
+            .HasColumnName("mfa_failed_attempts")
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(a => a.MfaLockedUntil)
+            .HasColumnName("mfa_locked_until");
+
         builder.Property(a => a.LastLoginAt)
             .HasColumnName("last_login_at");
 

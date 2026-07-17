@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sheba.Payment.Domain.Interfaces;
+using Sheba.Payment.Infrastructure.Adapters;
 using Sheba.Payment.Infrastructure.Persistence;
 using Sheba.Payment.Infrastructure.Persistence.Repositories;
 using Sheba.Shared.Kernel.Interfaces;
@@ -32,6 +33,10 @@ public static class PaymentModule
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork<PaymentDbContext>>();
         services.AddScoped<IInboxGuard, EfInboxGuard<PaymentDbContext>>();
+
+        // Cross-module query/command port — ServiceRequest drives payment steps via this,
+        // never via Sheba.Payment.Domain/Infrastructure directly (T-ARC-1).
+        services.AddScoped<IPaymentOrderPort, PaymentOrderPortAdapter>();
 
         return services;
     }

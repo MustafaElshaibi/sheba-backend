@@ -79,7 +79,7 @@ public sealed class ExceptionHandlerMiddleware(
                 "An unexpected error occurred while processing the request.",
                 code: 5001,
                 // snake_case key is contractual — see the worked example in api-contract.md §5.
-                data: new Dictionary<string, string> { ["correlation_id"] = context.TraceIdentifier });
+                data: new Dictionary<string, string> { ["correlation_id"] = CorrelationIdMiddleware.GetCorrelationId(context) });
 
             await WriteExceptionAsync(context, StatusCodes.Status500InternalServerError, envelope,
                 oauthError: "server_error", oauthDescription: "The authorization server encountered an unexpected error.");

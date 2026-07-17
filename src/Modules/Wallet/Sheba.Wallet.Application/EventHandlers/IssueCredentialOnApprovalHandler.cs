@@ -1,6 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sheba.Identity.Domain.DomainEvents;
+using Sheba.Shared.Kernel.Events.IntegrationEvents;
 using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Wallet.Application.Commands.IssueIdentityCredential;
 

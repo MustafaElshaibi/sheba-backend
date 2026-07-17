@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Sheba.Ministry.Domain.Interfaces;
+using Sheba.Shared.Kernel.Interfaces;
 using StackExchange.Redis;
 
 namespace Sheba.Ministry.Infrastructure.Security;

@@ -1,6 +1,7 @@
 using Sheba.ServiceRequest.Domain.DomainEvents;
 using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.Shared.Kernel.Entities;
+using Sheba.Shared.Kernel.Events.IntegrationEvents;
 using Sheba.Shared.Kernel.Exceptions;
 
 namespace Sheba.ServiceRequest.Domain.Entities;

@@ -9,6 +9,7 @@ using Sheba.Api.Middleware;
 using Sheba.Api.Outbox;
 using Sheba.Api.RateLimiting;
 using Sheba.Audit.Infrastructure;
+using Sheba.Audit.Infrastructure.Behaviors;
 using Sheba.Citizen.Infrastructure;
 using Sheba.Document.Infrastructure;
 using Sheba.Identity.Infrastructure;
@@ -47,6 +48,9 @@ try
     // ── Rate limiting (T-SEC-2) — Redis-backed sliding windows on auth-sensitive endpoints ──────
     builder.Services.AddShebaRateLimiting(redisMultiplexer);
 
+    // ── CORS (T-GW-1) — config-driven allow-list, no wildcard ──────────────────────────────────
+    builder.Services.AddShebaCors(builder.Configuration);
+
     // ── Module Registration ────────────────────────────────────────────────────────────────────
     // Each module registers its own DbContext, repositories, adapters, and validators.
     // Order matters for OpenIddict (Identity must be registered before AddAuthentication).
@@ -81,15 +85,19 @@ try
             typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
             typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,
             typeof(Sheba.Wallet.Application.Commands.IssueIdentityCredential.IssueIdentityCredentialCommand).Assembly,
-            typeof(Sheba.Admin.Application.Analytics.GetKpiSummary.GetKpiSummaryQuery).Assembly));
+            typeof(Sheba.Admin.Application.Analytics.GetKpiSummary.GetKpiSummaryQuery).Assembly,
+            typeof(Sheba.Audit.Application.Queries.GetAuditLog.GetAuditLogQuery).Assembly));
 
     // ── Pipeline Behaviors (registered in execution order) ────────────────────────────────────
-    // 1. LoggingBehavior   — always runs; wraps the full pipeline with timing
-    // 2. ValidationBehavior — runs FluentValidation before the handler
+    // 1. LoggingBehavior     — always runs; wraps the full pipeline with timing
+    // 2. ValidationBehavior  — runs FluentValidation before the handler
     // 3. TransactionBehavior — wraps commands marked ITransactionalCommand in a UoW transaction
+    // 4. AuditLoggingBehavior — writes a redacted audit_events row for every command (T-AUD-4)
+    builder.Services.AddHttpContextAccessor();
     builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
     builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
     builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
+    builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLoggingBehavior<,>));
 
     // ── FluentValidation — auto-discovers all validators in all module assemblies ──────────────
     // Both Infrastructure AND Application assemblies: command validators live in Application
@@ -209,10 +217,11 @@ try
 
     // ── Middleware Pipeline ───────────────────────────────────────────────────────────────────
     app.UseMiddleware<ExceptionHandlerMiddleware>();
+    app.UseMiddleware<CorrelationIdMiddleware>();  // T-GW-1 — before request logging so it's in scope
     app.UseSerilogRequestLogging(options =>
     {
         options.MessageTemplate =
-            "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000}ms";
+            "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000}ms [{CorrelationId}]";
     });
 
     // ── API Documentation — Swagger UI (always enabled so the API is explorable) ─────────────────
@@ -227,6 +236,7 @@ try
     });
 
     app.UseRateLimiter();  // T-SEC-2 — before auth, so a flooded caller never reaches OpenIddict
+    app.UseCors(CorsExtensions.PolicyName);  // T-GW-1
 
     app.UseAuthentication();
     app.UseAuthorization();

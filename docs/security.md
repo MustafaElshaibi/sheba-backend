@@ -61,14 +61,17 @@ re-encrypt → retire old key.
 ## 6. Webhook security (inbound)
 
 `X-Sheba-Signature: HMAC-SHA256(secret, timestamp + "." + raw_body)` (constant-time compare) +
-`X-Sheba-Timestamp` within ±5 min + `X-Sheba-Delivery-Id` dedup store. Order: signature →
-timestamp → dedup → process. Invalid receipts stored with `signature_valid=false` and alerted.
-Completing timestamp+dedup in code is **T-SRV-1**.
+`X-Sheba-Timestamp` within ±5 min + `X-Sheba-Delivery-Id` dedup store (Redis `SET NX`, fail-open
+on dedup only if Redis is unreachable — signature + timestamp still gate the callback). Order:
+signature → timestamp → dedup → process. Invalid receipts are never persisted with the raw body or
+secret; each rejection is logged as a structured warning (ministry id, status, reason) for
+alerting. Implemented in `MinistryWebhookVerifier` (**T-SRV-1**).
 
 ## 7. Input validation
 
 FluentValidation on every command (pipeline-enforced); JSON Schema validation of dynamic service
-forms server-side (**T-SRV-2** — schemas exist in DB, enforcement pending); ministry call URLs
+forms server-side (**T-SRV-2**, implemented via `JsonSchema.Net` in `SubmitServiceRequestValidator`
+— services without a registered form schema pass through unvalidated); ministry call URLs
 constructed only from admin-registered base URL + path template with variable whitelisting (no
 SSRF via citizen input); upload limits + MIME allowlists per required-document definition.
 

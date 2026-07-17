@@ -101,6 +101,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sheba.ServiceRequest.Tests"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sheba.Integration.Tests", "tests\Sheba.Integration.Tests\Sheba.Integration.Tests.csproj", "{5CBEDCA9-E343-46A7-8B5D-AF693A95E2AE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sheba.Audit.Tests", "tests\Sheba.Audit.Tests\Sheba.Audit.Tests.csproj", "{DA211DE5-F42C-47B0-9264-D036559477F6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -543,6 +545,18 @@ Global
 		{5CBEDCA9-E343-46A7-8B5D-AF693A95E2AE}.Release|x64.Build.0 = Release|Any CPU
 		{5CBEDCA9-E343-46A7-8B5D-AF693A95E2AE}.Release|x86.ActiveCfg = Release|Any CPU
 		{5CBEDCA9-E343-46A7-8B5D-AF693A95E2AE}.Release|x86.Build.0 = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|x64.Build.0 = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Debug|x86.Build.0 = Debug|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|x64.ActiveCfg = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|x64.Build.0 = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|x86.ActiveCfg = Release|Any CPU
+		{DA211DE5-F42C-47B0-9264-D036559477F6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -595,5 +609,6 @@ Global
 		{FDE38BC4-2CCE-4244-8F12-B7B13FBE833A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{22FCA38C-0CD7-4D66-B428-12C87ABA7D51} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5CBEDCA9-E343-46A7-8B5D-AF693A95E2AE} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{DA211DE5-F42C-47B0-9264-D036559477F6} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

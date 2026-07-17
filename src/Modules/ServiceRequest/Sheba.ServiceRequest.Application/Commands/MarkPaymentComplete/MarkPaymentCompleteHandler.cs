@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sheba.Payment.Domain.Interfaces;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
 using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.ServiceRequest.Domain.Interfaces;
 using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.ServiceRequest.Application.Commands.MarkPaymentComplete;
 
@@ -13,7 +13,7 @@ namespace Sheba.ServiceRequest.Application.Commands.MarkPaymentComplete;
 /// Marks the payment as paid, advances the workflow past the Payment step.
 /// </summary>
 public sealed class MarkPaymentCompleteHandler(
-    IPaymentRepository paymentRepo,
+    IPaymentOrderPort paymentOrders,
     IServiceRequestRepository requestRepo,
     IMediator mediator,
     ILogger<MarkPaymentCompleteHandler> logger
@@ -22,7 +22,7 @@ public sealed class MarkPaymentCompleteHandler(
     public async Task<MarkPaymentCompleteResponse> Handle(
         MarkPaymentCompleteCommand command, CancellationToken ct)
     {
-        var order = await paymentRepo.GetByIdAsync(command.PaymentOrderId, ct)
+        var order = await paymentOrders.GetByIdAsync(command.PaymentOrderId, ct)
             ?? throw new NotFoundException("PaymentOrder", command.PaymentOrderId);
 
         // NotFoundException (not Forbidden) for a non-owner — consistent with the rest of the
@@ -30,11 +30,10 @@ public sealed class MarkPaymentCompleteHandler(
         if (!command.IsAdmin && order.CitizenId != command.ActorId)
             throw new NotFoundException("PaymentOrder", command.PaymentOrderId);
 
-        if (order.Status == Payment.Domain.Enums.PaymentStatus.Completed)
+        if (order.Status == PaymentOrderStatus.Completed)
             return new MarkPaymentCompleteResponse(order.ServiceRequestId, "Payment already completed.");
 
-        order.MarkPaid(command.GatewayReference);
-        await paymentRepo.SaveChangesAsync(ct);
+        order = await paymentOrders.MarkPaidAsync(order.Id, command.GatewayReference, ct);
 
         // Complete the active payment step execution
         var activeStep = await requestRepo.GetActiveStepForRequestAsync(order.ServiceRequestId, ct);

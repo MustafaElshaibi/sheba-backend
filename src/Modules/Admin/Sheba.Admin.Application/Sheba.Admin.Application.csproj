@@ -2,9 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sheba.Admin.Domain\Sheba.Admin.Domain.csproj" />
-    <!-- Domain event contracts for cross-module MediatR handlers -->
-    <ProjectReference Include="..\..\Identity\Sheba.Identity.Domain\Sheba.Identity.Domain.csproj" />
-    <ProjectReference Include="..\..\ServiceRequest\Sheba.ServiceRequest.Domain\Sheba.ServiceRequest.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Sheba.Shared.Kernel\Sheba.Shared.Kernel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

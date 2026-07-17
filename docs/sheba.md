@@ -90,9 +90,12 @@ every way except process boundaries:
 - **Two sanctioned communication channels:**
   1. **In-process integration events** — MediatR `INotification`, made durable by the
      transactional outbox (§11).
-  2. **Shared-kernel query interfaces** — narrow, read-only ports defined in
+  2. **Shared-kernel query/command ports** — narrow interfaces defined in
      `Sheba.Shared.Kernel.Interfaces` (e.g. `ICitizenAccountQueryService`,
-     `IIdentityStatsProvider`) and implemented by the owning module as an adapter.
+     `IIdentityStatsProvider`, `IPaymentOrderPort`, `IMinistryCallPort`,
+     `IMinistryWebhookVerifier`) and implemented by the owning module as an adapter — including
+     ServiceRequest's dependency on Payment and Ministry, which used to be raw cross-module
+     project references (T-ARC-1) and now goes through these ports like everything else.
 
 This is the same discipline e-Estonia's X-Road enforces between ministries ("no direct database
 sharing; standard interfaces only") applied inside one process.
@@ -204,11 +207,32 @@ same responsibilities. Designing it as a named module keeps that move mechanical
 ### 3.5 Request pipeline (Gateway responsibilities)
 
 ```
-HTTPS → ExceptionHandler (JSend error/fail) → Serilog request logging → Rate limiter (T-SEC-2)
-     → CORS → AuthN (OpenIddict validation) → AuthZ (policies) → JSend result wrapping
+HTTPS → ExceptionHandler (JSend error/fail) → Correlation ID (X-Correlation-Id, T-GW-1)
+     → Serilog request logging → Rate limiter (T-SEC-2) → CORS (T-GW-1)
+     → AuthN (OpenIddict validation) → AuthZ (policies) → JSend result wrapping
      → Module endpoint groups (minimal APIs) → MediatR pipeline:
-        Logging → Validation (FluentValidation) → Authorization → Transaction+Outbox → Handler
+        Logging → Validation (FluentValidation) → Authorization → Transaction+Outbox
+        → Audit logging (T-AUD-4) → Handler
 ```
+
+`CorrelationIdMiddleware` reuses an inbound `X-Correlation-Id` header if the caller sent one,
+otherwise mints one from `HttpContext.TraceIdentifier`; it's pushed into the Serilog scope (every
+log line for the request carries it) and echoed on the response. It runs immediately after
+`ExceptionHandlerMiddleware` so the id is available to the 500 handler's `correlation_id` field
+even when the exception originates deep in the pipeline. CORS is a named policy
+(`Cors:AllowedOrigins` in config) with no wildcard — bearer tokens ride in headers set by JS
+callers, so an explicit allow-list is required; an empty/missing list blocks all cross-origin
+calls, which is the safe default for an unconfigured environment.
+
+`AuditLoggingBehavior` (T-AUD-4) is the innermost MediatR behavior — registered after
+`TransactionBehavior` so its own `audit.audit_events` write happens on its own `AuditDbContext`
+after the business transaction resolves, never inside it (cross-schema, so no shared transaction
+per rule 2). It intercepts every `*Command` (queries are skipped), takes the actor from the JWT
+`sub` claim (`Guid.Empty` for anonymous calls), and snapshots the request/response through
+`AuditSnapshotRedactor` — a redaction *allowlist*: only property names on an explicit safe list
+are written verbatim, everything else (including any future field nobody has reviewed yet) is
+replaced with `"[REDACTED]"`. A handler exception still produces a `Succeeded = false` audit row
+before the audit behavior re-throws.
 
 ---
 
@@ -649,10 +673,11 @@ Ministries call back at the registered `sheba_webhook_path`. Required headers:
 | `X-Sheba-Delivery-Id` | Ministry-generated UUID; deduplicated (idempotency) |
 
 Verification order: signature (constant-time compare) → timestamp window → delivery-id dedup →
-then processing. Failed-signature receipts are stored with `signature_valid=false` and alerted —
+then processing. Rejected receipts are never persisted with the raw body or signing secret; each
+rejection is logged as a structured warning (ministry id, rejection status, reason) for alerting —
 this is the Stripe/GitHub webhook model, chosen because it is the most widely implemented pattern
 ministry developers will already know. (Timestamp + dedup close the replay hole that
-signature-only schemes leave open — T-SRV-1 tracks completing this in code.)
+signature-only schemes leave open — implemented in `MinistryWebhookVerifier`, T-SRV-1.)
 
 ---
 
@@ -817,7 +842,8 @@ express "own ministry only").
 | Pay own fees | — | — | — | — | ✅ |
 
 Gap note: per-ministry scoping for Ministry Admin (the `ministry_id` claim + ownership policy) is
-partially enforced today — completing it is **T-AUTH-1**.
+not yet enforced — completing it is **T-AUTH-1**. Role-policy coverage itself is incomplete: the
+Wallet, Admin, and Audit route groups carry no authorization at all — **T-AUTH-2**.
 
 ---
 
@@ -871,7 +897,15 @@ outright. Changed to `init` accessors so the outbox round-trip preserves identit
 | `MinistryWebhookReceivedEvent` *(planned)* | ServiceRequest | Audit | Signed callback receipt trail |
 
 Naming: `<Aggregate><PastTenseVerb>Event`; payloads carry IDs + minimal facts, never full PII
-records (consumers query via shared-kernel ports if they need more).
+records (consumers query via shared-kernel ports if they need more). **Contract location:** an
+event with a cross-module consumer is declared in `Sheba.Shared.Kernel.Events.IntegrationEvents`
+— never in the producer's Domain assembly — so consumers can subscribe without referencing the
+producer project. `IdentityRequestDecidedEvent`, `ServiceRequestSubmittedEvent`, and
+`ServiceRequestCompletedEvent` moved there under T-ARC-1 (the 2026-07 audit found them still in
+producer Domains, forcing illegal cross-module references). `AccountRegisteredEvent`,
+`IdentityRequestSubmittedEvent`, and `WorkflowStepCompletedEvent` have no cross-module subscriber
+today and stay in their producer's Domain assembly — they move out only if/when one gains one
+(Notification's identity-review and citizen-notification consumers are still open, T-NOT-2).
 
 ### 11.3 Sagas vs. step engine
 
@@ -969,7 +1003,7 @@ mandatory TOTP (secret stored encrypted; enforcement is T-SEC-1).
 ### 13.6 Input validation
 
 FluentValidation at the MediatR pipeline (every command), JSON Schema validation for dynamic
-service forms (T-SRV-2), path-template variable whitelisting for ministry calls (no request-forgery
+service forms (implemented — T-SRV-2), path-template variable whitelisting for ministry calls (no request-forgery
 via admin-entered templates — URLs are built from registered base URL + template, never from
 citizen input).
 
@@ -1066,37 +1100,37 @@ Every capability/behavior from the project brief → where it is designed and wh
 
 | # | Brief requirement | Section(s) | Module(s) | Status |
 |---|-------------------|-----------|-----------|--------|
-| R1 | Modular monolith, strict module boundaries, separate schemas, no cross-module DB reads, mediator + integration events | §3.1, §8.2, §11 | All | Implemented |
+| R1 | Modular monolith, strict module boundaries, separate schemas, no cross-module DB reads, mediator + integration events | §3.1, §8.2, §11 | All | Implemented — every module project references only Shared.Kernel (T-ARC-1); zero cross-module `ProjectReference`s remain, including ServiceRequest→Ministry/Payment (both now Shared.Kernel ports) |
 | R2 | Ten bounded contexts incl. Gateway | §3.3, §5 | All | Implemented (Gateway = middleware, §5.11) |
 | R3 | Migration path / extraction seams | §3.4, §11.4 | All | Designed |
 | R4 | DDD, CQRS, Mediator, Repo+UoW, Outbox, Strategy, ACL/Adapter, Result, Options | §15 | All | Implemented — `Result<T>` (T-STD-1) adopted in Identity; other modules still exception-based, convert one module per pass |
-| R5 | Onboarding: registry NID+phone match → credentials → admin queue → dual email notifications → activation gate | §6.2 | Identity, Notification | Implemented |
+| R5 | Onboarding: registry NID+phone match → credentials → admin queue → dual email notifications → activation gate | §6.2 | Identity, Notification | Implemented; rejection re-application + abandoned-registration purge missing (T-ID-1) |
 | R6 | No login without active approved identity | §6.2 rule 6 | Identity | Implemented |
 | R7 | Login: NID/username + password, then phone OTP | §6.3 | Identity | Implemented (custom grant) |
 | R8 | Ministry/system auth: OIDC, OAuth2, API key, bearer, basic — per-integration selectable | §6.8 (inbound), §7.2 (outbound) | Identity, Ministry | Implemented |
-| R9 | RP management; "Sign in with Sheba"; own portal as RP | §6.7 | Identity | Implemented |
+| R9 | RP management; "Sign in with Sheba"; own portal as RP | §6.7 | Identity | Partially implemented — token/userinfo/logout only; `/connect/authorize` + consent missing (T-OIDC-1) |
 | R10 | `INationalIdProvider` + mock with seeded dev citizens + config-selectable real connector | §6.5 | Identity | Implemented |
-| R11 | `IOtpProvider` + console dev provider + pluggable SMS | §6.6 | Identity, Notification | Implemented |
+| R11 | `IOtpProvider` + console dev provider + pluggable SMS | §6.6 | Identity, Notification | Implemented; code generation must move out of providers (T-SEC-8) |
 | R12 | Ministry model: name/desc/base URL/endpoints/contracts/services/sub-ministries/credentials/health/webhooks | §7.1 | Ministry | Implemented |
-| R13 | Service call flow: authenticate with ministry credentials → invoke → receive responses & signed webhooks with idempotency | §7.3, §7.4 | ServiceRequest, Ministry | Implemented; replay hardening T-SRV-1 |
-| R14 | Service catalog: category, eligibility, required docs, fees, SLA, endpoint binding | §5.4 | ServiceRequest | Implemented |
-| R15 | Request lifecycle with status events + audit trail | §5.4.1 | ServiceRequest, Audit | Implemented |
-| R16 | RBAC: System Admin (also citizen, creates admins), Ministry Admin (own ministry only), Citizen; permission matrix | §10 | Identity + Gateway | Implemented; per-ministry scoping T-AUTH-1 |
+| R13 | Service call flow: authenticate with ministry credentials → invoke → receive responses & signed webhooks with idempotency | §7.3, §7.4 | ServiceRequest, Ministry | Implemented, incl. replay hardening (T-SRV-1) |
+| R14 | Service catalog: category, eligibility, required docs, fees, SLA, endpoint binding | §5.4 | ServiceRequest | Implemented; eligibility/LoA/required-docs not enforced at submission (T-SRV-3) |
+| R15 | Request lifecycle with status events + audit trail | §5.4.1 | ServiceRequest, Audit | Partially implemented — no transition guards, cancel endpoint, or SLA expiry (T-SRV-3/4); audit trail inert (T-AUD-4) |
+| R16 | RBAC: System Admin (also citizen, creates admins), Ministry Admin (own ministry only), Citizen; permission matrix | §10 | Identity + Gateway | Implemented — every route group carries `RequireAuthorization` or a justified `AllowAnonymous` (T-AUTH-2); per-ministry scoping still open (T-AUTH-1) |
 | R17 | JSend everywhere + HTTP mapping + shared wrapper + global exception handler + worked examples + api-contract.md | §9, [api-contract.md](api-contract.md) | Gateway/Kernel | Implemented (T-API-1) |
 | R18 | Normalized schema per module + ERD per context + IDs-only cross-context | §8, diagrams/erd-*.mmd | All | Implemented |
 | R19 | PII map, encryption, retention | §8.3 | All | Partially implemented (T-SEC-6/7) |
-| R20 | Tamper-evident audit logging | §5.9, §13.5 | Audit | Basic implemented; tamper-evidence T-AUD-1..3 |
-| R21 | Notifications email/SMS/push via provider abstraction | §5.8 | Notification | Email/SMS implemented; push deferred |
+| R20 | Tamper-evident audit logging | §5.9, §13.5 | Audit | Basic logging active (T-AUD-4: pipeline-registered, redacted snapshots); tamper-evidence T-AUD-1..3 still open |
+| R21 | Notifications email/SMS/push via provider abstraction | §5.8 | Notification | Partial — identity emails only, sent from the Identity module; no service-request notifications or delivery log (T-NOT-2); push deferred |
 | R22 | Payments & fees | §5.7 | Payment | Mock; T-PAY-1 |
-| R23 | Wallet with W3C VCs | §5.6 | Wallet | Implemented (JWT-VC) |
-| R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2) |
+| R23 | Wallet with W3C VCs | §5.6 | Wallet | Implemented (JWT-VC); issuer key ephemeral without config (T-WAL-1) |
+| R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2, CORS + correlation IDs T-GW-1); auth coverage gaps remain (T-AUTH-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |
 | R26 | Docker compose single server, segmented services, scaling story | §14 | — | Implemented |
-| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; gaps T-SEC-1..7 |
+| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; gaps T-SEC-1..9 (refresh-family revocation unimplemented — T-SEC-9) |
 | R28 | eKYC + admin approval as core capability | §6.2 | Identity | Implemented |
 | R29 | SSO for government services | §6.7 | Identity | Implemented |
 | R30 | Document management | §5.5 | Document | Implemented |
-| R31 | Analytics, reporting, audit logging | §12, §5.9 | Admin, Audit | Implemented |
+| R31 | Analytics, reporting, audit logging | §12, §5.9 | Admin, Audit | Analytics/reporting implemented; audit logging active (T-AUD-4) |
 | R32 | Event-driven architecture | §11 | All | Implemented — durable outbox + dispatcher + inbox (T-EVT-1) |
 | R33 | Pluggable civil-registry ("any registry can be plugged in") | §6.5, A4 | Identity | Implemented |
 | R34 | SAML support (brief lists it) | A8, §7.2 | Ministry | **Deliberately deferred** — enum reserved, no implementation (documented deviation) |

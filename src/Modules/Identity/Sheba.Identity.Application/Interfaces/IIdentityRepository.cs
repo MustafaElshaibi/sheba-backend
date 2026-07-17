@@ -27,6 +27,10 @@ public interface IIdentityRepository
     Task<AdminUser?> FindAdminByEmailAsync(string email, CancellationToken ct = default);
     Task<AdminUser?> FindAdminByIdAsync(Guid adminId, CancellationToken ct = default);
 
+    // ── AdminRecoveryCode ────────────────────────────────────────────────────
+    Task AddAdminRecoveryCodesAsync(IEnumerable<AdminRecoveryCode> codes, CancellationToken ct = default);
+    Task<List<AdminRecoveryCode>> GetUnusedAdminRecoveryCodesAsync(Guid adminUserId, CancellationToken ct = default);
+
     // ── Unit of Work ─────────────────────────────────────────────────────────
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

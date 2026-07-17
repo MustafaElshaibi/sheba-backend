@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -13,6 +14,7 @@ using Sheba.Wallet.Infrastructure.Persistence.Repositories;
 using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Shared.Kernel.Outbox;
 using Sheba.Shared.Kernel.Persistence;
+using Sheba.Shared.Kernel.Security;
 
 namespace Sheba.Wallet.Infrastructure;
 
@@ -46,28 +48,37 @@ public static class WalletModule
 
     public static WebApplication MapWalletEndpoints(this WebApplication app)
     {
+        // Wallet.SubjectId/AccountId is the same Guid as Identity's AccountId (cross-context id,
+        // rule 2) — the token "sub" claim IS the citizen's wallet subject, no lookup needed.
         var wallet = app.MapGroup("/api/wallet").WithTags("Wallet")
+            .RequireAuthorization("CitizenOnly")
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
-        // ── GET /api/wallet/credentials — list the citizen's VCs with decoded claims ─────────────
+        // ── GET /api/wallet/credentials — list the caller's own VCs with decoded claims ──────────
         wallet.MapGet("/credentials", async (
-            Guid citizenId, IMediator mediator, CancellationToken ct) =>
+            ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetMyCredentialsQuery(citizenId), ct);
+            var result = await mediator.Send(new GetMyCredentialsQuery(user.RequireSubjectId()), ct);
             return Results.Ok(result);
         })
         .WithName("GetMyCredentials")
-        .WithSummary("List all Verifiable Credentials for the citizen, with decoded claims.");
+        .WithSummary("List all Verifiable Credentials for the calling citizen, with decoded claims.");
 
-        // ── POST /api/wallet/credentials/issue — issue an identity VC (admin/testing) ────────────
-        wallet.MapPost("/credentials/issue", async (
+        // ── POST /api/admin/wallet/credentials/issue — force-issue a VC outside the normal ───────
+        // approval-triggered flow (IdentityRequestDecidedEvent already issues one automatically).
+        // Admin-only: an arbitrary AccountId in the body means this must never be citizen-callable.
+        var walletAdmin = app.MapGroup("/api/admin/wallet").WithTags("Wallet — Admin")
+            .RequireAuthorization("IdentityReviewer")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        walletAdmin.MapPost("/credentials/issue", async (
             IssueIdentityCredentialCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
             return Results.Created($"/api/wallet/credentials/{result.CredentialId}", result);
         })
         .WithName("IssueIdentityCredential")
-        .WithSummary("Issue a W3C Digital Identity Credential (JWT/RS256) for an approved account.");
+        .WithSummary("Admin: force-issue a W3C Digital Identity Credential for an approved account (testing/manual re-issue).");
 
         return app;
     }

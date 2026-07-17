@@ -13,5 +13,9 @@ public sealed class LoginAdminValidator : AbstractValidator<LoginAdminCommand>
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Password is required.")
             .MaximumLength(256).WithMessage("Password is too long.");
+
+        RuleFor(x => x.MfaCode)
+            .MaximumLength(32).WithMessage("Verification code is too long.")
+            .When(x => x.MfaCode is not null);
     }
 }

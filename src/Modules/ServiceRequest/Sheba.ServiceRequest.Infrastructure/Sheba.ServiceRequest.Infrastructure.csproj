@@ -2,8 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sheba.ServiceRequest.Application\Sheba.ServiceRequest.Application.csproj" />
-    <ProjectReference Include="..\..\Ministry\Sheba.Ministry.Infrastructure\Sheba.Ministry.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\Payment\Sheba.Payment.Infrastructure\Sheba.Payment.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -14,6 +14,9 @@ public sealed class AdminUser : BaseEntity
     public string Status { get; private set; } = "ACTIVE";
     public string PasswordHash { get; private set; } = string.Empty;
     public string? MfaSecret { get; private set; }
+    public bool MfaEnabled { get; private set; }
+    public int MfaFailedAttempts { get; private set; }
+    public DateTime? MfaLockedUntil { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
 
     private AdminUser() { }
@@ -45,9 +48,51 @@ public sealed class AdminUser : BaseEntity
         Touch();
     }
 
+    /// <summary>
+    /// Begins (or restarts) TOTP enrollment — stores the encrypted secret but leaves MFA
+    /// unenforced until <see cref="ConfirmMfaEnrollment"/> proves the admin's authenticator app
+    /// actually has it (otherwise a typo'd QR scan could lock the admin out permanently).
+    /// </summary>
     public void SetMfaSecret(string encryptedSecret)
     {
+        if (MfaEnabled)
+            throw new DomainException("MFA is already enabled. Disable it before re-enrolling.");
+
         MfaSecret = encryptedSecret;
+        Touch();
+    }
+
+    /// <summary>Confirms enrollment after the admin proves possession with a valid TOTP code.</summary>
+    public void ConfirmMfaEnrollment()
+    {
+        if (MfaSecret is null)
+            throw new DomainException("No MFA enrollment is in progress for this admin.");
+        if (MfaEnabled)
+            throw new DomainException("MFA is already enabled.");
+
+        MfaEnabled = true;
+        MfaFailedAttempts = 0;
+        MfaLockedUntil = null;
+        Touch();
+    }
+
+    public bool IsMfaLocked() => MfaLockedUntil.HasValue && MfaLockedUntil > DateTime.UtcNow;
+
+    /// <summary>Records a failed TOTP/recovery-code attempt; locks after 5 (mirrors Account's
+    /// password lockout in BR-LG-3 — the same brute-force math applies to a 6-digit code).</summary>
+    public void RecordFailedMfaAttempt()
+    {
+        MfaFailedAttempts++;
+        if (MfaFailedAttempts >= 5)
+            MfaLockedUntil = DateTime.UtcNow.AddMinutes(Math.Pow(2, MfaFailedAttempts - 4));
+        Touch();
+    }
+
+    /// <summary>Resets MFA failure counters after a successful TOTP/recovery-code verification.</summary>
+    public void ResetMfaFailures()
+    {
+        MfaFailedAttempts = 0;
+        MfaLockedUntil = null;
         Touch();
     }
 

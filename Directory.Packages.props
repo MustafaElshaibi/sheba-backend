@@ -16,6 +16,10 @@
     <PackageVersion Include="FluentValidation.AspNetCore"                    Version="11.3.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Validation">
+    <PackageVersion Include="JsonSchema.Net"                                 Version="9.2.2" />
+  </ItemGroup>
+
   <ItemGroup Label="Database">
     <PackageVersion Include="Microsoft.EntityFrameworkCore"                  Version="9.0.6" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational"       Version="9.0.6" />

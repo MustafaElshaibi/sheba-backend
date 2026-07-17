@@ -1,21 +1,21 @@
 using Microsoft.Extensions.Logging;
-using Sheba.Payment.Domain.Entities;
-using Sheba.Payment.Domain.Interfaces;
 using Sheba.ServiceRequest.Domain.Entities;
 using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.ServiceRequest.Domain.Interfaces;
+using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.ServiceRequest.Application.StepHandlers;
 
 /// <summary>
 /// Handles the Payment workflow step:
 /// 1. Calculates total fees from the service definition
-/// 2. Creates a PaymentOrder in the payment schema
+/// 2. Creates a payment order via the Shared.Kernel port (T-ARC-1 — Payment.Domain never
+///    referenced directly)
 /// 3. Returns payment URL; workflow pauses until MarkPaymentComplete
 /// </summary>
 public sealed class PaymentStepHandler(
     IServiceDefinitionRepository definitionRepo,
-    IPaymentRepository paymentRepo,
+    IPaymentOrderPort paymentOrders,
     ILogger<PaymentStepHandler> logger
 ) : IWorkflowStepHandler
 {
@@ -28,7 +28,7 @@ public sealed class PaymentStepHandler(
         CancellationToken ct = default)
     {
         // Check if payment already exists for this request
-        var existing = await paymentRepo.GetByServiceRequestIdAsync(request.Id, ct);
+        var existing = await paymentOrders.GetByServiceRequestIdAsync(request.Id, ct);
         if (existing is not null)
         {
             return new StepExecutionResult(true, false,
@@ -48,12 +48,9 @@ public sealed class PaymentStepHandler(
         }
 
         var currency = fees.FirstOrDefault()?.Currency ?? "YER";
-        var order = PaymentOrder.Create(
+        var order = await paymentOrders.CreateOrderAsync(
             request.Id, request.CitizenId, mandatoryTotal, currency,
-            $"Payment for {request.ReferenceNumber}");
-
-        await paymentRepo.AddAsync(order, ct);
-        await paymentRepo.SaveChangesAsync(ct);
+            $"Payment for {request.ReferenceNumber}", ct);
 
         // Mark request as payment pending — workflow pauses here
         request.MarkPaymentPending();

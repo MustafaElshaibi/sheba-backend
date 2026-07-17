@@ -1,10 +1,10 @@
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sheba.Ministry.Domain.Interfaces;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
 using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.ServiceRequest.Domain.Interfaces;
+using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.ServiceRequest.Application.Commands.HandleWebhookCallback;
 
@@ -15,7 +15,8 @@ namespace Sheba.ServiceRequest.Application.Commands.HandleWebhookCallback;
 /// delivery-id dedup — BEFORE anything is parsed or any state changes. An unverified callback can
 /// advance a citizen's request through the workflow, so verification is the gate, not an
 /// afterthought. Verification lives behind the Ministry-owned <see cref="IMinistryWebhookVerifier"/>
-/// port because the signing secret and its decryption belong inside the Ministry boundary.
+/// port (declared in Shared.Kernel, T-ARC-1) because the signing secret and its decryption belong
+/// inside the Ministry boundary.
 /// </summary>
 public sealed class HandleWebhookCallbackHandler(
     IServiceRequestRepository requestRepo,
