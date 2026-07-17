@@ -49,8 +49,11 @@ authorization-guarded; audit trail active with PII redaction; module boundaries 
   to keep `RefreshTokenFamily` over OpenIddict-native tracking (known-issues §3.5), implementation
   is T-SEC-9. The runbook's live staging drill is still a pending pre-production checklist item.
 - Password reset flow (OTP-gated) & account recovery rules.
-- RP management polish: secret rotation endpoint, per-RP consent screen copy.
-- **T-AUTH-1** Ministry-Admin scoping claim + ownership policies end-to-end.
+- ~~RP management polish: secret rotation endpoint, per-RP consent screen copy.~~ Done —
+  `POST /{clientId}/rotate-secret`; bilingual (Arabic/English) `/connect/consent` copy.
+- ~~**T-AUTH-1** Ministry-Admin scoping claim + ownership policies end-to-end.~~ Done for
+  `/api/ministry` + ServiceRequest admin routes; Admin/KPI ministry-slice filtering split out as
+  T-AUTH-3 (was never in T-AUTH-1's literal TASKS.md scope).
 
 **Exit:** STRIDE rows in [sheba.md §13.5](sheba.md#135-stride-summary-auth-flows) all mitigated in
 code, verified by contract tests.

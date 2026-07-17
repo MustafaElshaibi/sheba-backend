@@ -7,6 +7,31 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Ministry-Admin per-ministry scoping (T-AUTH-1)**: `AdminUser.MinistryId` (required for
+  `MinistryManager`, forbidden for every other role — enforced in `AdminUser.Create`) is embedded
+  as a `ministry_id` claim on admin tokens and enforced two ways: `MinistryOwnershipFilter`
+  (new, Ministry.Infrastructure) on every `/api/ministry/{id}/...` route compares the route id
+  against the claim; ServiceRequest's admin routes carry an `ActorMinistryId` command parameter
+  checked in the handler (`UpdateServiceDefinition`/`SetServiceFee` 404 — not 403 — on a
+  cross-ministry attempt, matching the anti-enumeration shape BR-DO-1 already established;
+  `CreateServiceDefinition`'s body `MinistryId` and `GetAllRequests`' `ministryId` filter are both
+  force-overridden to the caller's own ministry when scoped). SuperAdmin's ministry_id-less token
+  is unrestricted throughout — absence of the claim means "no restriction," never "restricted to
+  nothing."
+
+  New minimal `POST /api/admin/admin-users` (SuperAdmin-only) — a required prerequisite, since
+  there was previously no way to create any admin account beyond the seeded SuperAdmin, which
+  would have made the ministry_id claim impossible to attach to a real MinistryManager account.
+
+  **Verified live**: created two ministries and a MinistryManager scoped to one; confirmed 200 on
+  their own ministry, 403 (JSend `permissions`) on the other, and SuperAdmin unaffected on both.
+  25 new unit tests (domain invariant, CreateAdminUser handler, ownership filter, both
+  ServiceRequest ownership handlers). Found and reported two issues while testing live, not fixed
+  here: `POST /api/admin/admin-users`'s `role` field only accepts numeric `AdminRole` values, not
+  the string name, since no `JsonStringEnumConverter` is configured anywhere in the app (fixing it
+  globally risks changing every module's existing JSON shape without a full audit); Admin/KPI
+  reports have no ministry-slice filtering despite sheba.md §10.2 documenting one (T-AUTH-3, was
+  never in T-AUTH-1's literal TASKS.md scope).
 - **Access-token encryption for external RPs (T-SEC-5)**: access tokens are now encrypted (JWE,
   RSA-OAEP/A256CBC-HS512) whenever a real `Identity:EncryptionCertificates` cert is configured —
   reusing T-SEC-4's `SigningCertificateLoader` result to decide, rather than an environment-name

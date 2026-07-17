@@ -104,7 +104,10 @@ deactivates its subtree for new calls.
 **BR-MI-3** Ministry credentials are write-only through the API: create/update accepted, plaintext
 never returned. Decryption happens only inside auth adapters at call time.
 **BR-MI-4** Only System Admin or the owning Ministry Admin can modify a ministry's data,
-endpoints, credentials, or webhooks.
+endpoints, credentials, or webhooks (**T-AUTH-1** closed: `MinistryOwnershipFilter` on
+`/api/ministry/{id}/...`, handler checks on the ServiceRequest admin routes — [sheba.md
+§10.2](sheba.md#102-permission-matrix)). Same rule for a ministry's services and fees in the
+catalog (`CreateServiceDefinition`/`UpdateServiceDefinition`/`SetServiceFee`).
 **BR-MI-5** Inbound webhooks must pass HMAC signature + timestamp window + delivery-id dedup
 ([sheba.md §7.4](sheba.md#74-inbound-webhooks--verification-contract)) before any processing.
 Invalid-signature receipts are stored and alerted, never processed.

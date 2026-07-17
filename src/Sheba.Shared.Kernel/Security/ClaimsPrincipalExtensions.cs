@@ -31,4 +31,13 @@ public static class ClaimsPrincipalExtensions
     /// <summary>The role claim value, accepting either the "role" or the mapped role claim type.</summary>
     public static string? GetRole(this ClaimsPrincipal user) =>
         user.FindFirst("role")?.Value ?? user.FindFirst(ClaimTypes.Role)?.Value;
+
+    /// <summary>
+    /// The admin's ministry scope (T-AUTH-1) — present only for MinistryManager tokens. Null
+    /// means either not an admin token, or an unrestricted role (SuperAdmin sees every ministry).
+    /// Callers enforcing ownership treat null as "no restriction", never as "restricted to
+    /// nothing" — the absence of a claim is not itself a denial.
+    /// </summary>
+    public static Guid? GetMinistryId(this ClaimsPrincipal user) =>
+        Guid.TryParse(user.FindFirst("ministry_id")?.Value, out var id) ? id : null;
 }

@@ -16,6 +16,13 @@ public sealed class UpdateServiceDefinitionHandler(
         var service = await repository.GetServiceByIdAsync(request.ServiceId, ct)
             ?? throw new NotFoundException("ServiceDefinition", request.ServiceId);
 
+        // T-AUTH-1: a MinistryManager may only update services their own ministry owns.
+        // NotFoundException, not UnauthorizedAccessException — same anti-enumeration shape used
+        // elsewhere for ownership checks (BR-DO-1) so a scoped admin can't probe which service
+        // IDs exist outside their ministry by distinguishing 403 from 404.
+        if (request.ActorMinistryId is { } actorMinistryId && service.MinistryId != actorMinistryId)
+            throw new NotFoundException("ServiceDefinition", request.ServiceId);
+
         service.Update(
             request.NameAr, request.NameEn,
             request.DescriptionAr, request.DescriptionEn,

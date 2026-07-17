@@ -13,8 +13,12 @@ public sealed class SetServiceFeeHandler(
 {
     public async Task<SetServiceFeeResponse> Handle(SetServiceFeeCommand request, CancellationToken ct)
     {
-        _ = await repository.GetServiceByIdAsync(request.ServiceId, ct)
+        var service = await repository.GetServiceByIdAsync(request.ServiceId, ct)
             ?? throw new NotFoundException("ServiceDefinition", request.ServiceId);
+
+        // T-AUTH-1: same anti-enumeration shape as UpdateServiceDefinitionHandler.
+        if (request.ActorMinistryId is { } actorMinistryId && service.MinistryId != actorMinistryId)
+            throw new NotFoundException("ServiceDefinition", request.ServiceId);
 
         var fee = ServiceFee.Create(
             request.ServiceId, request.FeeType,

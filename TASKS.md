@@ -69,8 +69,15 @@ row in known-issues §1 by the same ID.
 - [x] **T-SEC-4** Signing-cert rotation-by-overlap: config for multiple certs, rotation runbook in
       [docs/security.md](docs/security.md) §4, staging drill. Decide the open question on
       `RefreshTokenFamily` vs OpenIddict-native tracking (known-issues §3.5).
-- [ ] **T-AUTH-1** Ministry-Admin scoping: `ministry_id` claim + ownership policy applied to every
+- [x] **T-AUTH-1** Ministry-Admin scoping: `ministry_id` claim + ownership policy applied to every
       `/api/ministry` and admin ServiceRequest endpoint; contract tests per the permission matrix.
+- [ ] **T-AUTH-3** Admin/KPI ministry-slice filtering *(Low · S · deps: T-AUTH-1 ✓ · issue:
+      T-AUTH-3)*: filter `GetKpiSummary` and report generation by the caller's `ministry_id` claim
+      when present (SuperAdmin/Auditor keep the global view). Found as a residual gap while closing
+      T-AUTH-1 — sheba.md §10.2 documents "own ministry slice" for this row but it was never in
+      T-AUTH-1's literal scope.
+      AC: a MinistryManager's KPI/report endpoints return only their own ministry's numbers;
+      SuperAdmin/Auditor unaffected.
 - [x] **T-SEC-5** Access-token hardening for external RPs in production: enable OpenIddict
       access-token encryption (or reference tokens + introspection); keep unencrypted JWTs in
       dev for inspectability.

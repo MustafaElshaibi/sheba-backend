@@ -168,7 +168,7 @@ flowchart TB
 
 | Module | Schema | Route groups | Role |
 |--------|--------|-------------|------|
-| Identity | `identity` | `/api/identity`, `/connect/*`, `/api/admin/identity-requests`, `/api/admin/relying-parties`, `/api/admin/mfa` | OIDC provider, eKYC, approvals, RP registry, admin MFA |
+| Identity | `identity` | `/api/identity`, `/connect/*`, `/api/admin/identity-requests`, `/api/admin/relying-parties`, `/api/admin/mfa`, `/api/admin/admin-users` | OIDC provider, eKYC, approvals, RP registry, admin MFA, admin provisioning |
 | Citizen | `citizen` | `/api/citizens` | Extended citizen profile |
 | Ministry | `ministry` | `/api/ministry` | Integration registry + credential vault |
 | ServiceRequest | `service_req` | `/api/services`, `/api/requests`, `/api/admin/services`, `/api/admin/requests` | Catalog + workflow engine |
@@ -1007,9 +1007,17 @@ express "own ministry only").
 | Submit/cancel own service requests | ✅ (as citizen) | — | — | — | ✅ |
 | Pay own fees | — | — | — | — | ✅ |
 
-Gap note: per-ministry scoping for Ministry Admin (the `ministry_id` claim + ownership policy) is
-not yet enforced — completing it is **T-AUTH-1**. Role-policy coverage itself is incomplete: the
-Wallet, Admin, and Audit route groups carry no authorization at all — **T-AUTH-2**.
+**T-AUTH-1 closed** for the rows TASKS.md scoped it to: `ministry_id` is a claim on the
+MinistryManager's token (set at admin-account creation — `POST /api/admin/admin-users`,
+SuperAdmin-only), enforced by `MinistryOwnershipFilter` on every `/api/ministry/{id}/...` route and
+by handler-level checks on the ServiceRequest admin routes (`CreateServiceDefinition` forces the
+body's ministryId to the caller's own; `UpdateServiceDefinition`/`SetServiceFee` 404 — not 403, to
+avoid leaking which service IDs exist outside the caller's ministry — on a cross-ministry attempt;
+`GetAllRequests`' `ministryId` filter is forced the same way). SuperAdmin's ministry_id-less token
+remains unrestricted throughout. **Still open:** the "View KPIs / generate reports — own ministry
+slice" row above (Admin module KPI/report filtering was never in T-AUTH-1's literal scope per
+TASKS.md, and remains unimplemented — tracked as **T-AUTH-3**). Role-policy coverage itself was the
+separate, already-closed **T-AUTH-2**.
 
 ---
 
@@ -1282,7 +1290,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R13 | Service call flow: authenticate with ministry credentials → invoke → receive responses & signed webhooks with idempotency | §7.3, §7.4 | ServiceRequest, Ministry | Implemented, incl. replay hardening (T-SRV-1) |
 | R14 | Service catalog: category, eligibility, required docs, fees, SLA, endpoint binding | §5.4 | ServiceRequest | Implemented; eligibility/LoA/required-docs not enforced at submission (T-SRV-3) |
 | R15 | Request lifecycle with status events + audit trail | §5.4.1 | ServiceRequest, Audit | Partially implemented — no transition guards, cancel endpoint, or SLA expiry (T-SRV-3/4); audit trail inert (T-AUD-4) |
-| R16 | RBAC: System Admin (also citizen, creates admins), Ministry Admin (own ministry only), Citizen; permission matrix | §10 | Identity + Gateway | Implemented — every route group carries `RequireAuthorization` or a justified `AllowAnonymous` (T-AUTH-2); per-ministry scoping still open (T-AUTH-1) |
+| R16 | RBAC: System Admin (also citizen, creates admins), Ministry Admin (own ministry only), Citizen; permission matrix | §10 | Identity + Gateway | Implemented — every route group carries `RequireAuthorization` or a justified `AllowAnonymous` (T-AUTH-2); per-ministry scoping implemented for `/api/ministry` + ServiceRequest admin routes (T-AUTH-1); Admin/KPI ministry-slice filtering still open (T-AUTH-3) |
 | R17 | JSend everywhere + HTTP mapping + shared wrapper + global exception handler + worked examples + api-contract.md | §9, [api-contract.md](api-contract.md) | Gateway/Kernel | Implemented (T-API-1) |
 | R18 | Normalized schema per module + ERD per context + IDs-only cross-context | §8, diagrams/erd-*.mmd | All | Implemented |
 | R19 | PII map, encryption, retention | §8.3 | All | Partially implemented (T-SEC-6/7) |

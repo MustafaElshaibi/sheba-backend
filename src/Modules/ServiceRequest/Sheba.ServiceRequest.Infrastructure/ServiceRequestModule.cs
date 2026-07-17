@@ -106,18 +106,23 @@ public static class ServiceRequestModule
         .WithSummary("Create a new service category.");
 
         admin.MapPost("/", async (
-            CreateServiceDefinitionCommand command, IMediator mediator, CancellationToken ct) =>
+            CreateServiceDefinitionCommand command, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(command, ct);
+            // T-AUTH-1: a MinistryManager's own ministry always wins over whatever the body
+            // claims — the caller-supplied-identity bug this pattern exists to close elsewhere
+            // (LoA upgrade, document ownership) applies just as much to "which ministry owns the
+            // service I'm creating." SuperAdmin (no ministry_id claim) keeps the body value.
+            var cmd = user.GetMinistryId() is { } ministryId ? command with { MinistryId = ministryId } : command;
+            var result = await mediator.Send(cmd, ct);
             return Results.Created($"/api/services/{result.ServiceId}", result);
         })
         .WithName("CreateServiceDefinition")
         .WithSummary("Create a new service definition (starts unpublished).");
 
         admin.MapPut("/{id:guid}", async (
-            Guid id, UpdateServiceDefinitionCommand command, IMediator mediator, CancellationToken ct) =>
+            Guid id, UpdateServiceDefinitionCommand command, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var cmd = command with { ServiceId = id };
+            var cmd = command with { ServiceId = id, ActorMinistryId = user.GetMinistryId() };
             var result = await mediator.Send(cmd, ct);
             return Results.Ok(result);
         })
@@ -125,9 +130,9 @@ public static class ServiceRequestModule
         .WithSummary("Update service details. Set Publish=true/false to publish/depublish.");
 
         admin.MapPost("/{id:guid}/fees", async (
-            Guid id, SetServiceFeeCommand command, IMediator mediator, CancellationToken ct) =>
+            Guid id, SetServiceFeeCommand command, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var cmd = command with { ServiceId = id };
+            var cmd = command with { ServiceId = id, ActorMinistryId = user.GetMinistryId() };
             var result = await mediator.Send(cmd, ct);
             return Results.Created($"/api/services/{id}/fees/{result.FeeId}", result);
         })
@@ -234,13 +239,17 @@ public static class ServiceRequestModule
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         adminReq.MapGet("/", async (
-            IMediator mediator,
+            ClaimsPrincipal user, IMediator mediator,
             RequestLifecycleStatus? status, Guid? serviceId, Guid? ministryId,
             DateTime? fromDate, DateTime? toDate,
             int? page, int? pageSize, CancellationToken ct) =>
         {
+            // T-AUTH-1: a MinistryManager's own ministry always wins over whatever the query
+            // string asks for (including "omitted", which would otherwise mean "all ministries")
+            // — the same caller-supplied-identity override as CreateServiceDefinition above.
+            var effectiveMinistryId = user.GetMinistryId() ?? ministryId;
             var result = await mediator.Send(new GetAllRequestsQuery(
-                status, serviceId, ministryId, fromDate, toDate,
+                status, serviceId, effectiveMinistryId, fromDate, toDate,
                 page ?? 1, pageSize ?? 20), ct);
             return Results.Ok(result);
         })

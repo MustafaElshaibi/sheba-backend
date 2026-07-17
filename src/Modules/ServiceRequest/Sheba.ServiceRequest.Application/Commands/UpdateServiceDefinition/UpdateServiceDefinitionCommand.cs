@@ -13,7 +13,10 @@ public sealed record UpdateServiceDefinitionCommand(
     bool IsOnline = true,
     int? AverageDays = null,
     int DisplayOrder = 0,
-    bool? Publish = null       // true=publish, false=depublish, null=no change
+    bool? Publish = null,      // true=publish, false=depublish, null=no change
+    // T-AUTH-1: null for SuperAdmin (unrestricted); a MinistryManager's own ministry_id
+    // otherwise — the handler rejects updating a service owned by a different ministry.
+    Guid? ActorMinistryId = null
 ) : IRequest<UpdateServiceDefinitionResponse>;
 
 public sealed record UpdateServiceDefinitionResponse(Guid ServiceId, string Message);

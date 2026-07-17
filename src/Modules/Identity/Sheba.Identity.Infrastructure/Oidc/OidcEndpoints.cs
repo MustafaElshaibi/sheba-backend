@@ -169,6 +169,10 @@ public static class OidcEndpoints
         identity.SetClaim(Claims.Name, result.Value.FullName);
         identity.SetClaim(Claims.Email, result.Value.Email);
         identity.SetClaim("role", result.Value.Role);
+        // T-AUTH-1: present only for MinistryManager. Ownership checks treat its absence as
+        // "unrestricted" (SuperAdmin), never as "restricted to nothing" — see GetMinistryId.
+        if (result.Value.MinistryId is { } ministryId)
+            identity.SetClaim("ministry_id", ministryId.ToString());
 
         var principal = new ClaimsPrincipal(identity);
 

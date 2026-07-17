@@ -93,8 +93,10 @@ public static class MinistryModule
     public static WebApplication MapMinistryEndpoints(this WebApplication app)
     {
         // Gated to admins who manage ministries (SuperAdmin or MinistryManager). Per-ministry
-        // ownership — a MinistryManager touching only their own ministry_id — is not enforced
-        // yet; that is T-AUTH-1, tracked separately and deliberately out of scope here.
+        // ownership (T-AUTH-1) is enforced by MinistryOwnershipFilter on every route below whose
+        // {id} route value IS the ministry being acted on; SuperAdmin's ministry_id-less token
+        // passes it unrestricted. GET / and POST / have no such route value and are deliberately
+        // left off the filter — see the filter's own doc comment for why.
         var api = app.MapGroup("/api/ministry")
             .WithTags("Ministry")
             .RequireAuthorization("MinistryManager")
@@ -115,6 +117,7 @@ public static class MinistryModule
             var result = await mediator.Send(new GetMinistryByIdQuery(id), ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("GetMinistryById")
         .WithSummary("Get full ministry detail with auth configs, endpoints, and webhooks.");
 
@@ -135,6 +138,7 @@ public static class MinistryModule
             var result = await mediator.Send(cmd, ct);
             return Results.Ok(result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("UpdateMinistry")
         .WithSummary("Update ministry details.");
 
@@ -146,6 +150,7 @@ public static class MinistryModule
             var result = await mediator.Send(cmd, ct);
             return Results.Created($"/api/ministry/{id}/auth-config/{result.AuthConfigId}", result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("SetMinistryAuthConfig")
         .WithSummary("Add an auth configuration with encrypted credentials.");
 
@@ -156,6 +161,7 @@ public static class MinistryModule
             var result = await mediator.Send(new TestMinistryConnectionCommand(body.AuthConfigId), ct);
             return Results.Ok(result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("TestMinistryConnection")
         .WithSummary("Test connectivity to a ministry API using the selected auth config.");
 
@@ -167,6 +173,7 @@ public static class MinistryModule
             var result = await mediator.Send(cmd, ct);
             return Results.Created($"/api/ministry/{id}/endpoints/{result.EndpointId}", result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("RegisterMinistryEndpoint")
         .WithSummary("Register a new API endpoint for this ministry.");
 
@@ -178,6 +185,7 @@ public static class MinistryModule
             var result = await mediator.Send(cmd, ct);
             return Results.Created($"/api/ministry/{id}/webhooks/{result.WebhookId}", result);
         })
+        .AddEndpointFilter<Security.MinistryOwnershipFilter>()
         .WithName("RegisterMinistryWebhook")
         .WithSummary("Register a webhook for ministry callback notifications.");
 

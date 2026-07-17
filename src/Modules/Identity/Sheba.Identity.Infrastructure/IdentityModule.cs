@@ -15,6 +15,7 @@ using OpenIddict.Validation.AspNetCore;
 using Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 using Sheba.Identity.Application.Commands.CompleteRegistration;
 using Sheba.Identity.Application.Commands.ConfirmAdminMfa;
+using Sheba.Identity.Application.Commands.CreateAdminUser;
 using Sheba.Identity.Application.Commands.EnrollAdminMfa;
 using Sheba.Identity.Application.Commands.LoginCitizen;
 using Sheba.Identity.Application.Commands.RegisterCitizen;
@@ -406,6 +407,22 @@ public static class IdentityModule
         })
         .WithName("ConfirmAdminMfa")
         .WithSummary("Step 2: confirm enrollment with a live code — enables MFA and issues recovery codes.");
+
+        // ── Admin user provisioning (T-AUTH-1 prerequisite) ───────────────────
+        // SuperAdminOnly — account provisioning is a privileged operation. A MinistryManager
+        // requires ministryId; every other role must omit it (AdminUser.Create enforces this).
+        var adminUsers = app.MapGroup("/api/admin/admin-users").WithTags("Admin — Users")
+            .RequireAuthorization("SuperAdminOnly")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        adminUsers.MapPost("/", async (
+            CreateAdminUserCommand command, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(command, ct);
+            return result.ToHttpResult();
+        })
+        .WithName("CreateAdminUser")
+        .WithSummary("Provision a new admin account, optionally scoped to a ministry (MinistryManager role).");
 
         // ── Admin identity-request review queue ───────────────────────────────
         var admin = app.MapGroup("/api/admin/identity-requests")

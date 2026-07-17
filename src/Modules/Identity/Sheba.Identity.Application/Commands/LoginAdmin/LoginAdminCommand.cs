@@ -27,5 +27,6 @@ public sealed record LoginAdminResponse(
     Guid AdminId,
     string Role,
     string FullName,
-    string Email
+    string Email,
+    Guid? MinistryId
 );

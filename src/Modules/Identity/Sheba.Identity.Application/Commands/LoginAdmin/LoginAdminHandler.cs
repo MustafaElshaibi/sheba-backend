@@ -68,7 +68,8 @@ public sealed class LoginAdminHandler(
             AdminId: admin.Id,
             Role: admin.Role.ToString(),
             FullName: admin.FullName,
-            Email: admin.Email));
+            Email: admin.Email,
+            MinistryId: admin.MinistryId));
     }
 
     /// <summary>Returns null when the second factor checks out; otherwise the failure to return.</summary>

@@ -19,6 +19,13 @@ public sealed class AdminUser : BaseEntity
     public DateTime? MfaLockedUntil { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
 
+    /// <summary>Logical FK to a Ministry row (T-AUTH-1) — bare Guid per the module-boundary rule,
+    /// never validated against the Ministry schema directly. Required for MinistryManager (that
+    /// role's whole purpose is managing exactly one ministry's integration); null for every other
+    /// role, which are either unrestricted (SuperAdmin) or not ministry-scoped by nature
+    /// (IdentityReviewer, Auditor, Support).</summary>
+    public Guid? MinistryId { get; private set; }
+
     private AdminUser() { }
 
     public static AdminUser Create(
@@ -27,8 +34,14 @@ public sealed class AdminUser : BaseEntity
         string fullName,
         AdminRole role,
         string passwordHash,
-        string? department = null)
+        string? department = null,
+        Guid? ministryId = null)
     {
+        if (role == AdminRole.MinistryManager && ministryId is null)
+            throw new DomainException("A MinistryManager must be scoped to a ministry.");
+        if (role != AdminRole.MinistryManager && ministryId is not null)
+            throw new DomainException($"{role} admins are not ministry-scoped.");
+
         var admin = new AdminUser
         {
             EmployeeId = employeeId,
@@ -36,7 +49,8 @@ public sealed class AdminUser : BaseEntity
             FullName = fullName,
             Role = role,
             Department = department,
-            PasswordHash = passwordHash
+            PasswordHash = passwordHash,
+            MinistryId = ministryId
         };
 
         return admin;

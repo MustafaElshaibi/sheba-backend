@@ -74,6 +74,12 @@ internal sealed class AdminUserConfiguration : IEntityTypeConfiguration<AdminUse
         builder.Property(a => a.MfaLockedUntil)
             .HasColumnName("mfa_locked_until");
 
+        builder.Property(a => a.MinistryId)
+            .HasColumnName("ministry_id");
+
+        builder.HasIndex(a => a.MinistryId)
+            .HasDatabaseName("ix_admin_users_ministry_id");
+
         builder.Property(a => a.LastLoginAt)
             .HasColumnName("last_login_at");
 
