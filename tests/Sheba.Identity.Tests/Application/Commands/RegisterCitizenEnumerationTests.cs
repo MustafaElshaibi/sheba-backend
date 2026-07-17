@@ -21,11 +21,12 @@ public sealed class RegisterCitizenEnumerationTests
     private readonly INationalIdProvider _nid = Substitute.For<INationalIdProvider>();
     private readonly IOtpProvider _otp = Substitute.For<IOtpProvider>();
     private readonly IOtpHasher _otpHasher = Substitute.For<IOtpHasher>();
+    private readonly IOtpCodeGenerator _otpCodeGenerator = Substitute.For<IOtpCodeGenerator>();
     private readonly RegisterCitizenHandler _sut;
 
     public RegisterCitizenEnumerationTests()
         => _sut = new RegisterCitizenHandler(
-            _repo, _nid, _otp, _otpHasher, NullLogger<RegisterCitizenHandler>.Instance);
+            _repo, _nid, _otp, _otpHasher, _otpCodeGenerator, NullLogger<RegisterCitizenHandler>.Instance);
 
     private static NationalIdLookupResult NotFound(string nid) =>
         new(false, nid, "", "", "", default, "", NidStatus.NotFound);

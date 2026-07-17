@@ -5,24 +5,21 @@ using Sheba.Identity.Domain.Interfaces;
 namespace Sheba.Identity.Infrastructure.Adapters;
 
 /// <summary>
-/// Development OTP provider: prints the generated code to the console/Seq log instead of sending SMS.
-/// Active when: Otp:ActiveProvider = "Console"
+/// Development OTP provider: prints the caller-supplied code to the console/Seq log instead of
+/// sending SMS. Active when: Otp:ActiveProvider = "Console"
 ///
-/// The provider is stateless — it only generates the raw code.
-/// Hashing and storage happen in the application command handler.
+/// The provider is stateless and does not generate codes (§6.6) — it only prints/delivers
+/// whatever code the Application layer already generated and hashed.
 /// </summary>
 public sealed class ConsoleOtpProvider(ILogger<ConsoleOtpProvider> logger) : IOtpProvider
 {
-    private static readonly Random _random = new();
-
-    public Task<(OtpSendResult Result, string RawCode)> SendAsync(
+    public Task<OtpSendResult> SendAsync(
         string destination,
+        string code,
         OtpPurpose purpose,
         OtpChannel channel,
         CancellationToken cancellationToken = default)
     {
-        var code = _random.Next(100_000, 999_999).ToString("D6");
-
         // Print clearly in development console so devs can read it
         logger.LogWarning(
             """
@@ -36,7 +33,7 @@ public sealed class ConsoleOtpProvider(ILogger<ConsoleOtpProvider> logger) : IOt
             """,
             destination, purpose, channel, code);
 
-        return Task.FromResult((new OtpSendResult(Succeeded: true), code));
+        return Task.FromResult(new OtpSendResult(Succeeded: true));
     }
 
     public Task<OtpVerifyResult> VerifyAsync(

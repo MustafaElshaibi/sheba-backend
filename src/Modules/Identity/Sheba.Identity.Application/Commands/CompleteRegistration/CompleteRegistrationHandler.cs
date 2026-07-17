@@ -22,6 +22,8 @@ public sealed class CompleteRegistrationHandler(
     IIdentityRepository repository,
     IPasswordHasher passwordHasher,
     IOtpProvider otpProvider,
+    IOtpHasher otpHasher,
+    IOtpCodeGenerator otpCodeGenerator,
     ILogger<CompleteRegistrationHandler> logger
 ) : IRequestHandler<CompleteRegistrationCommand, Result<CompleteRegistrationResponse>>
 {
@@ -54,8 +56,10 @@ public sealed class CompleteRegistrationHandler(
         account.SetCredentials(request.Username, request.Email, passwordHash);
 
         // ── Send email verification token ─────────────────────────────────────
-        var (otpResult, rawToken) = await otpProvider.SendAsync(
+        var rawToken = otpCodeGenerator.GenerateNumericCode();
+        var otpResult = await otpProvider.SendAsync(
             destination: request.Email,
+            code:        rawToken,
             purpose:     OtpPurpose.EmailVerify,
             channel:     OtpChannel.Email,
             cancellationToken: cancellationToken);
@@ -71,7 +75,7 @@ public sealed class CompleteRegistrationHandler(
             accountId:  account.Id,
             purpose:    OtpPurpose.EmailVerify,
             channel:    OtpChannel.Email,
-            codeHash:   rawToken,
+            codeHash:   otpHasher.Hash(rawToken),
             ttlMinutes: 15);
 
         await repository.AddOtpRecordAsync(otpRecord, cancellationToken);

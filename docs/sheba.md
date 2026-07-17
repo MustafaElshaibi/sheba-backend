@@ -557,14 +557,18 @@ authoritative source is unreachable), fail open for login (login never consults 
 ```csharp
 public interface IOtpProvider                  // Identity.Domain port
 {
-    string ProviderCode { get; }               // "Console" | "Twilio" | future local gateways
-    Task SendAsync(string phoneNumber, string code, OtpPurpose purpose, CancellationToken ct);
+    Task<OtpSendResult> SendAsync(
+        string destination, string code, OtpPurpose purpose, OtpChannel channel, CancellationToken ct);
+    Task<OtpVerifyResult> VerifyAsync(string destination, string code, OtpPurpose purpose, CancellationToken ct);
 }
 ```
 
 Selected by `Otp:ActiveProvider`. `ConsoleOtpProvider` (dev — logs the code), `TwilioOtpProvider`
-(prod-shaped). Generation, hashing, TTL, attempts, and throttling are **provider-independent** —
-they live in the application layer, so a provider can only deliver codes, never weaken policy.
+(prod-shaped, uses Verify's `CustomCode` so Twilio delivers the code we generated instead of
+picking its own). Generation, hashing, TTL, attempts, and throttling are **provider-independent**
+— they live in the application layer (`IOtpCodeGenerator` generates, `IOtpHasher` hashes, both in
+Shared.Kernel), so a provider can only deliver a code it's handed, never generate, choose, or
+weaken policy (**T-SEC-8** closed).
 
 ### 6.7 Relying-party management ("Sign in with Sheba")
 
@@ -1321,7 +1325,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R8 | Ministry/system auth: OIDC, OAuth2, API key, bearer, basic — per-integration selectable | §6.8 (inbound), §7.2 (outbound) | Identity, Ministry | Implemented |
 | R9 | RP management; "Sign in with Sheba"; own portal as RP | §6.7 | Identity | Partially implemented — token/userinfo/logout only; `/connect/authorize` + consent missing (T-OIDC-1) |
 | R10 | `INationalIdProvider` + mock with seeded dev citizens + config-selectable real connector | §6.5 | Identity | Implemented |
-| R11 | `IOtpProvider` + console dev provider + pluggable SMS | §6.6 | Identity, Notification | Implemented; code generation must move out of providers (T-SEC-8) |
+| R11 | `IOtpProvider` + console dev provider + pluggable SMS | §6.6 | Identity, Notification | Implemented — code generation lives in Identity.Application (T-SEC-8) |
 | R12 | Ministry model: name/desc/base URL/endpoints/contracts/services/sub-ministries/credentials/health/webhooks | §7.1 | Ministry | Implemented |
 | R13 | Service call flow: authenticate with ministry credentials → invoke → receive responses & signed webhooks with idempotency | §7.3, §7.4 | ServiceRequest, Ministry | Implemented, incl. replay hardening (T-SRV-1) |
 | R14 | Service catalog: category, eligibility, required docs, fees, SLA, endpoint binding | §5.4 | ServiceRequest | Implemented; eligibility/LoA/required-docs not enforced at submission (T-SRV-3) |

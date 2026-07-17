@@ -27,6 +27,7 @@ public sealed class RegisterCitizenHandler(
     INationalIdProvider nidProvider,
     IOtpProvider otpProvider,
     IOtpHasher otpHasher,
+    IOtpCodeGenerator otpCodeGenerator,
     ILogger<RegisterCitizenHandler> logger
 ) : IRequestHandler<RegisterCitizenCommand, Result<RegisterCitizenResponse>>
 {
@@ -103,8 +104,10 @@ public sealed class RegisterCitizenHandler(
             citizenSnapshot: citizenSnapshot);
 
         // ── Step 5: Generate and store OTP ──────────────────────────────────────
-        var (otpResult, rawCode) = await otpProvider.SendAsync(
+        var rawCode = otpCodeGenerator.GenerateNumericCode();
+        var otpResult = await otpProvider.SendAsync(
             destination: nidResult.PhoneNumber,
+            code:        rawCode,
             purpose:     OtpPurpose.Registration,
             channel:     OtpChannel.Sms,
             cancellationToken: cancellationToken);

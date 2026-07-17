@@ -119,7 +119,7 @@ row in known-issues §1 by the same ID.
       ownership-checked).
       AC: approving an identity request produces exactly one profile row (idempotent under
       event redelivery); a citizen can read/update only their own profile.
-- [ ] **T-SEC-8** Move OTP generation into the application layer *(Medium · S · deps: none ·
+- [x] **T-SEC-8** Move OTP generation into the application layer *(Medium · S · deps: none ·
       issue: T-SEC-8)*: one CSPRNG generation + hashing service in Identity.Application;
       `IOtpProvider.SendAsync` takes the ready code and only delivers (§6.6) — it no longer
       returns a raw code.

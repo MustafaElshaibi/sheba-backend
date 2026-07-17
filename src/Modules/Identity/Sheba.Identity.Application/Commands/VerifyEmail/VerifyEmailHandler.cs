@@ -3,12 +3,14 @@ using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Entities;
 using Sheba.Identity.Domain.Enums;
+using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyEmail;
 
 public sealed class VerifyEmailHandler(
     IIdentityRepository repository,
+    IOtpHasher otpHasher,
     ILogger<VerifyEmailHandler> logger
 ) : IRequestHandler<VerifyEmailCommand, Result<VerifyEmailResponse>>
 {
@@ -51,7 +53,7 @@ public sealed class VerifyEmailHandler(
 
         otpRecord.RecordAttempt();
 
-        if (otpRecord.CodeHash != request.Token)
+        if (!otpHasher.Verify(request.Token, otpRecord.CodeHash))
         {
             await repository.SaveChangesAsync(cancellationToken);
             return Result.Failure<VerifyEmailResponse>(Error.Validation(

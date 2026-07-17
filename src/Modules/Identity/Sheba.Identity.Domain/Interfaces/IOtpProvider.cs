@@ -16,11 +16,14 @@ public sealed record OtpVerifyResult(bool IsValid, string? ErrorMessage = null);
 public interface IOtpProvider
 {
     /// <summary>
-    /// Generates a 6-digit OTP and sends it via the configured channel.
-    /// Returns the raw code so the caller can hash and store it.
+    /// Delivers an already-generated OTP <paramref name="code"/> via the configured channel.
+    /// The provider is purely a delivery mechanism (§6.6) — it never generates, chooses, or
+    /// knows a code beyond what it's handed here; generation and hashing are the Application
+    /// layer's responsibility (<c>IOtpCodeGenerator</c> / <c>IOtpHasher</c> in Shared.Kernel).
     /// </summary>
-    Task<(OtpSendResult Result, string RawCode)> SendAsync(
+    Task<OtpSendResult> SendAsync(
         string destination,
+        string code,
         OtpPurpose purpose,
         OtpChannel channel,
         CancellationToken cancellationToken = default);

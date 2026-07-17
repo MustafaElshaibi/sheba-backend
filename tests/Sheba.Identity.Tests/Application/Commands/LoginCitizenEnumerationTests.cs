@@ -28,16 +28,17 @@ public sealed class LoginCitizenEnumerationTests
     private readonly IOtpProvider _otp = Substitute.For<IOtpProvider>();
     private readonly IPasswordHasher _passwordHasher = new Argon2idPasswordHasher();
     private readonly IOtpHasher _otpHasher = new Argon2idOtpHasher();
+    private readonly IOtpCodeGenerator _otpCodeGenerator = new CryptoOtpCodeGenerator();
     private readonly LoginCitizenHandler _sut;
 
     public LoginCitizenEnumerationTests()
     {
         _sut = new LoginCitizenHandler(
-            _repo, _otp, _passwordHasher, _otpHasher, NullLogger<LoginCitizenHandler>.Instance);
+            _repo, _otp, _passwordHasher, _otpHasher, _otpCodeGenerator, NullLogger<LoginCitizenHandler>.Instance);
 
         // Default OTP send succeeds (only the Approved path reaches it).
-        _otp.SendAsync(Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult((new OtpSendResult(true), "123456")));
+        _otp.SendAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult(new OtpSendResult(true)));
     }
 
     // ── account builders ───────────────────────────────────────────────────────
@@ -132,7 +133,7 @@ public sealed class LoginCitizenEnumerationTests
         result.IsFailure.Should().BeTrue();
         result.Error!.Message.Should().Contain("pending admin approval");
         await _otp.DidNotReceive().SendAsync(
-            Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -149,7 +150,7 @@ public sealed class LoginCitizenEnumerationTests
         result.Error!.Message.Should().Contain("Invalid credentials");
         result.Error!.Message.ToLowerInvariant().Should().NotContain("lock");
         await _otp.DidNotReceive().SendAsync(
-            Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<OtpPurpose>(), Arg.Any<OtpChannel>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -163,6 +164,6 @@ public sealed class LoginCitizenEnumerationTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AccountId.Should().Be(account.Id);
         await _otp.Received(1).SendAsync(
-            account.PhoneNumber, OtpPurpose.Login, OtpChannel.Sms, Arg.Any<CancellationToken>());
+            account.PhoneNumber, Arg.Any<string>(), OtpPurpose.Login, OtpChannel.Sms, Arg.Any<CancellationToken>());
     }
 }

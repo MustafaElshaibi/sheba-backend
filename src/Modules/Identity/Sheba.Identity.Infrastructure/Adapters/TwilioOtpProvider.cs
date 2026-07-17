@@ -38,8 +38,9 @@ public sealed class TwilioOtpProvider : IOtpProvider
         TwilioClient.Init(accountSid, authToken);
     }
 
-    public async Task<(OtpSendResult Result, string RawCode)> SendAsync(
+    public async Task<OtpSendResult> SendAsync(
         string destination,
+        string code,
         OtpPurpose purpose,
         OtpChannel channel,
         CancellationToken cancellationToken = default)
@@ -52,25 +53,27 @@ public sealed class TwilioOtpProvider : IOtpProvider
                 "[TwilioOTP] Sending OTP to {Destination} via {Channel} for {Purpose}",
                 destination, twilioChannel, purpose);
 
-            // Twilio Verify manages its own codes — we don't get the raw code back.
-            // Store a sentinel value in the DB to indicate "Twilio manages verification".
+            // Twilio Verify normally generates its own code, which would make it impossible for
+            // this provider to "only deliver" (§6.6) — CustomCode makes Twilio send OUR code
+            // instead of picking one, so the Application layer's hash of the real code is what
+            // ends up verified, the same as every other provider. Requires the Verify Service's
+            // "Custom Code" setting enabled in the Twilio console.
             var verification = await VerificationResource.CreateAsync(
-                to: destination,
-                channel: twilioChannel,
-                pathServiceSid: _verifyServiceSid);
+                new CreateVerificationOptions(_verifyServiceSid, destination, twilioChannel)
+                {
+                    CustomCode = code
+                });
 
             _logger.LogInformation(
                 "[TwilioOTP] OTP sent. Verification SID={Sid} Status={Status}",
                 verification.Sid, verification.Status);
 
-            // Return sentinel — the application layer should detect "TWILIO_MANAGED"
-            // and skip the local code-hash check, delegating to VerifyAsync instead.
-            return (new OtpSendResult(Succeeded: true), "TWILIO_MANAGED");
+            return new OtpSendResult(Succeeded: true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[TwilioOTP] Failed to send OTP to {Destination}", destination);
-            return (new OtpSendResult(Succeeded: false, ex.Message), string.Empty);
+            return new OtpSendResult(Succeeded: false, ex.Message);
         }
     }
 

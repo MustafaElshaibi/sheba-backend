@@ -7,6 +7,32 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **OTP generation moved into the Application layer (T-SEC-8)**: new `IOtpCodeGenerator`
+  (Shared.Kernel, implemented by `CryptoOtpCodeGenerator` in Identity.Infrastructure) generates
+  numeric codes via `RandomNumberGenerator.GetInt32` (unbiased CSPRNG — replaces `ConsoleOtpProvider`'s
+  previous `System.Random`, which is neither cryptographically secure nor was it the app layer's
+  call to make). `IOtpProvider.SendAsync` now takes the ready code as a parameter instead of
+  generating one and handing it back — a provider is purely a delivery mechanism now, exactly as
+  §6.6 always documented but didn't enforce. `LoginCitizenHandler`, `RegisterCitizenHandler`, and
+  `CompleteRegistrationHandler` generate the code, hash it (`IOtpHasher`), then call `SendAsync`.
+  `TwilioOtpProvider` uses Verify's `CustomCode` option so Twilio delivers *our* code instead of
+  minting its own (requires "Custom Code" enabled on the Verify Service in the Twilio console) —
+  this also drops the unused `"TWILIO_MANAGED"` sentinel that no application-layer code ever
+  actually checked.
+
+  Fixed a real bug found while making this change: `CompleteRegistrationHandler` was storing the
+  **raw** email-verification token directly in `OtpRecord.CodeHash` (never hashed), and
+  `VerifyEmailHandler` compared it with a plain `!=` string check — contradicting the documented
+  "raw code is NEVER stored" invariant and using a non-constant-time comparison. Both handlers now
+  go through `IOtpHasher.Hash`/`Verify` like every other OTP purpose already did.
+
+  10 new tests (`CryptoOtpCodeGenerator`, `CompleteRegistrationHandler`, `VerifyEmailHandler` —
+  the latter previously had zero coverage). **Verified live**: register → the app-generated code
+  appears in the console log and verifies correctly; complete-registration → confirmed
+  `otp_records.code_hash` for `EmailVerify` is now a real Argon2id hash, not the plaintext
+  token → `verify-email` with the real token succeeds. Full suite: `dotnet build` clean,
+  `dotnet test` 156/156 passing.
+
 - **Refresh-token family tracking for the browser PKCE flow (T-OIDC-2)**:
   `AuthorizeEndpoints.IssueAuthorizationCode` now calls the same `AttachRefreshFamilyClaimsAsync`
   helper the two custom grants (`IssueCitizenTokenAsync`/`IssueAdminTokenAsync`) already used, so

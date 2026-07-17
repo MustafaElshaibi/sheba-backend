@@ -124,6 +124,10 @@ public static class IdentityModule
         // ── 5c. OTP hasher (IOtpHasher → Argon2idOtpHasher) ────────────────────
         services.AddScoped<IOtpHasher, Argon2idOtpHasher>();
 
+        // ── 5c-i. OTP code generator (IOtpCodeGenerator → CryptoOtpCodeGenerator, T-SEC-8) ──
+        // Generation lives here, in the Application layer's control — providers only deliver.
+        services.AddScoped<IOtpCodeGenerator, CryptoOtpCodeGenerator>();
+
         // ── 5d. Cross-module query service — Wallet module reads citizen data via this ──
         services.AddScoped<ICitizenAccountQueryService, CitizenAccountQueryAdapter>();
 

@@ -27,6 +27,7 @@ public sealed class LoginCitizenHandler(
     IOtpProvider otpProvider,
     IPasswordHasher passwordHasher,
     IOtpHasher otpHasher,
+    IOtpCodeGenerator otpCodeGenerator,
     ILogger<LoginCitizenHandler> logger
 ) : IRequestHandler<LoginCitizenCommand, Result<LoginCitizenResponse>>
 {
@@ -107,8 +108,10 @@ public sealed class LoginCitizenHandler(
         // ── Step 6: Invalidate old OTPs and send new one ──────────────────────
         await repository.InvalidatePreviousOtpsAsync(account.Id, OtpPurpose.Login, cancellationToken);
 
-        var (otpResult, rawCode) = await otpProvider.SendAsync(
+        var rawCode = otpCodeGenerator.GenerateNumericCode();
+        var otpResult = await otpProvider.SendAsync(
             destination: account.PhoneNumber,
+            code:        rawCode,
             purpose:     OtpPurpose.Login,
             channel:     OtpChannel.Sms,
             cancellationToken: cancellationToken);
