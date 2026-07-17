@@ -568,14 +568,20 @@ they live in the application layer, so a provider can only deliver codes, never 
 
 ### 6.7 Relying-party management ("Sign in with Sheba")
 
-Admins register RPs at `/api/admin/relying-parties`; each registration creates both the
-`RelyingParty` business record and the OpenIddict application (client id/secret, redirect URIs,
-allowed scopes, client type). Confidential clients get secrets; public clients (SPAs, mobile) get
-PKCE-only. Sheba's own portal is RP `sheba-portal` (public + PKCE + custom grant) and the admin
-dashboard is `sheba-admin` (confidential) — dogfooding the same SSO everyone else uses, exactly as
-UAE Pass's own apps are ordinary RPs of the UAE Pass IdP. Scope grants are per-RP allowlists;
-`civil_data` additionally requires citizen consent at the authorize prompt and LoA ≥ 2 (Myinfo
-pattern: the citizen controls what data each RP receives).
+Admins register RPs at `/api/admin/relying-parties`. **OpenIddict's own application store is the
+registry** — registration creates only the OpenIddict application (client id/secret, redirect
+URIs, allowed scopes, client type) via `IOpenIddictApplicationManager`; the `RelyingParty`/
+`RpRedirectUri`/`RpScope` domain entities in `Sheba.Identity.Domain` exist but are never written
+to by these endpoints (a leftover from an earlier design that would have duplicated OpenIddict's
+own tables — `RelyingPartyEndpoints.cs`'s own docstring explains the decision not to). Confidential
+clients get secrets, rotatable on demand (`POST /{clientId}/rotate-secret`, T-OIDC-1 — the previous
+secret stops working immediately, every other registered field is preserved); public clients
+(SPAs, mobile) get PKCE-only, no secret. Sheba's own portal is RP `sheba-portal` (public + PKCE +
+custom grant) and the admin dashboard is `sheba-admin` (confidential) — dogfooding the same SSO
+everyone else uses, exactly as UAE Pass's own apps are ordinary RPs of the UAE Pass IdP. Scope
+grants are per-RP allowlists; `civil_data` additionally requires citizen consent at the authorize
+prompt and LoA ≥ 2 (Myinfo pattern: the citizen controls what data each RP receives) — mechanism
+in [§6.10](sheba.md#610-browser-authorization-code--pkce-flow-with-consent-t-oidc-1).
 
 ### 6.8 Ministry / machine authentication (inbound)
 

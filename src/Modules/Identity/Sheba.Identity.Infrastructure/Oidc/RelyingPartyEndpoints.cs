@@ -16,10 +16,11 @@ namespace Sheba.Identity.Infrastructure.Oidc;
 /// the OpenIddict tables with a parallel relying_parties schema.
 ///
 /// Endpoints (admin):
-///   GET    /api/admin/relying-parties            — list all registered clients
-///   POST   /api/admin/relying-parties            — register a client (secret returned once)
-///   GET    /api/admin/relying-parties/{clientId} — client detail (no secret)
-///   DELETE /api/admin/relying-parties/{clientId} — revoke/remove a client
+///   GET    /api/admin/relying-parties                      — list all registered clients
+///   POST   /api/admin/relying-parties                      — register a client (secret returned once)
+///   GET    /api/admin/relying-parties/{clientId}           — client detail (no secret)
+///   POST   /api/admin/relying-parties/{clientId}/rotate-secret — confidential clients only (T-OIDC-1)
+///   DELETE /api/admin/relying-parties/{clientId}           — revoke/remove a client
 /// </summary>
 public static class RelyingPartyEndpoints
 {
@@ -116,6 +117,36 @@ public static class RelyingPartyEndpoints
         })
         .WithName("RegisterRelyingParty")
         .WithSummary("Register a new relying party. For confidential clients the secret is returned once.");
+
+        // ── Rotate secret (T-OIDC-1) ─────────────────────────────────────────
+        group.MapPost("/{clientId}/rotate-secret", async (
+            string clientId, IOpenIddictApplicationManager manager, CancellationToken ct) =>
+        {
+            var app = await manager.FindByClientIdAsync(clientId, ct);
+            if (app is null) return Results.NotFound();
+
+            var clientType = await manager.GetClientTypeAsync(app, ct);
+            if (!string.Equals(clientType, ClientTypes.Confidential, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "Only confidential clients have a secret to rotate." });
+
+            // Preserve every other registered field (redirect URIs, scopes, permissions) — only
+            // the secret changes. Existing access/refresh tokens the RP already holds are
+            // unaffected; only its NEXT token request needs the new secret (BR-RP-2).
+            var newSecret = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+            var descriptor = new OpenIddictApplicationDescriptor();
+            await manager.PopulateAsync(descriptor, app, ct);
+            descriptor.ClientSecret = newSecret;
+            await manager.UpdateAsync(app, descriptor, ct);
+
+            return Results.Ok(new
+            {
+                clientId,
+                clientSecret = newSecret,
+                message = "Store this client secret now — it will not be shown again. The previous secret is now invalid."
+            });
+        })
+        .WithName("RotateRelyingPartySecret")
+        .WithSummary("Rotate a confidential relying party's client secret (returned exactly once); the previous secret stops working immediately.");
 
         // ── Delete / revoke ────────────────────────────────────────────────────
         group.MapDelete("/{clientId}", async (

@@ -157,23 +157,39 @@ public static class AuthorizeEndpoints
     private static string ConsentMarkerKey(string subjectId, string clientId, string scope) =>
         $"sheba:consent:{subjectId}:{clientId}:{scope}";
 
+    // Bilingual (Arabic first, RTL) per the repo convention that anything citizen-facing carries
+    // an Ar/En pair — this is the one page in an otherwise API-only backend that a citizen
+    // actually reads, so it's the one place that convention applies to rendered copy rather than
+    // a data field.
     private static string ConsentPageHtml(string clientId, string queryString)
     {
         var safeClientId = HtmlEscape(clientId);
         var safeQuery = HtmlEscape(queryString);
 
         var sb = new System.Text.StringBuilder();
-        sb.Append("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">");
-        sb.Append("<title>Sheba — Authorize ").Append(safeClientId).Append("</title></head>");
-        sb.Append("<body style=\"font-family: sans-serif; max-width: 480px; margin: 4rem auto; line-height: 1.5;\">");
+        sb.Append("<!DOCTYPE html><html lang=\"ar\" dir=\"rtl\"><head><meta charset=\"utf-8\">");
+        sb.Append("<title>شبة — تفويض ").Append(safeClientId).Append("</title></head>");
+        sb.Append("<body style=\"font-family: sans-serif; max-width: 480px; margin: 4rem auto; line-height: 1.7;\">");
+
+        sb.Append("<section lang=\"ar\" dir=\"rtl\">");
+        sb.Append("<h2>هل تسمح لتطبيق ").Append(safeClientId).Append(" بالوصول إلى هويتك في شبة؟</h2>");
+        sb.Append("<p>يطلب هذا التطبيق الاطلاع على بياناتك الموثقة (بصمة أحادية الاتجاه لرقمك الوطني، ");
+        sb.Append("اسمك، ومستوى التحقق من هويتك). لن يتمكن التطبيق من رؤية رقم هويتك الوطنية الفعلي.</p>");
+        sb.Append("</section>");
+
+        sb.Append("<hr style=\"margin: 1.5rem 0;\" />");
+
+        sb.Append("<section lang=\"en\" dir=\"ltr\">");
         sb.Append("<h2>Allow ").Append(safeClientId).Append(" to access your Sheba identity?</h2>");
         sb.Append("<p>This app is asking to view your verified identity claims (a one-way hash of ");
         sb.Append("your national ID, your name, and your verified assurance level). It will not see ");
         sb.Append("your raw national ID number.</p>");
-        sb.Append("<form method=\"post\" action=\"/connect/consent/decide\">");
+        sb.Append("</section>");
+
+        sb.Append("<form method=\"post\" action=\"/connect/consent/decide\" dir=\"ltr\">");
         sb.Append("<input type=\"hidden\" name=\"query\" value=\"").Append(safeQuery).Append("\" />");
-        sb.Append("<button type=\"submit\" name=\"decision\" value=\"allow\">Allow</button>");
-        sb.Append("<button type=\"submit\" name=\"decision\" value=\"deny\">Deny</button>");
+        sb.Append("<button type=\"submit\" name=\"decision\" value=\"allow\">السماح / Allow</button> ");
+        sb.Append("<button type=\"submit\" name=\"decision\" value=\"deny\">رفض / Deny</button>");
         sb.Append("</form></body></html>");
         return sb.ToString();
     }

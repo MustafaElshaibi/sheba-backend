@@ -83,7 +83,8 @@ admin-review pipeline. Upgrades only ever increase, only on `Approved` accounts.
 **BR-RP-1** Only System Admin registers RPs. Each RP gets an OpenIddict client + scope allowlist +
 redirect-URI allowlist (exact match).
 **BR-RP-2** Public clients (SPA/mobile) use PKCE; no client secrets. Confidential clients rotate
-secrets on demand.
+secrets on demand (`POST /api/admin/relying-parties/{clientId}/rotate-secret`, T-OIDC-1 —
+generated server-side, shown once, previous secret invalid immediately).
 **BR-RP-3** `civil_data`-class scopes require explicit citizen consent at the authorize prompt,
 gated on LoA ≥ 2 (T-OIDC-1, [sheba.md §6.10](sheba.md#610-browser-authorization-code--pkce-flow-with-consent-t-oidc-1)).
 Consent is **not yet persisted** across sessions — every `civil_data` authorize request re-prompts,

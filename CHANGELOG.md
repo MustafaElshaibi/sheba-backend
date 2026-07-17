@@ -7,6 +7,20 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **RP secret rotation + bilingual consent screen copy**: `POST
+  /api/admin/relying-parties/{clientId}/rotate-secret` (SuperAdmin-only) generates a new
+  cryptographically random secret for a confidential client via
+  `IOpenIddictApplicationManager.UpdateAsync`, preserving every other registered field; the
+  previous secret is rejected immediately (verified live: old secret → `invalid_client`, new
+  secret → 200). `/connect/consent`'s copy is now Arabic-first (RTL) with an English section below
+  it, matching the repo's citizen-facing bilingual convention — the previous pass had shipped it
+  English-only. Found and reported two pre-existing issues while testing this live (not fixed
+  here, flagged separately): `DELETE /api/admin/relying-parties/{clientId}` 500s on a
+  `MissingMethodException` (OpenIddict.EntityFrameworkCore 5.7.0 calling an EF Core
+  `ExecuteDeleteAsync` overload absent from the pinned EF Core 9.0.6 — T-OIDC-3); sheba.md §6.7
+  claimed RP registration writes a `RelyingParty` domain-entity row alongside the OpenIddict
+  application, which the code has never done (`RelyingPartyEndpoints.cs`'s own docstring explains
+  why) — corrected in place, no dedicated task since it's a doc fix, not a functional gap.
 - **Browser authorization-code + PKCE flow with civil_data consent (T-OIDC-1)**: `/connect/authorize`
   now has a real handler (`AuthorizeEndpoints`) behind the passthrough that was enabled but unused
   since Phase 0. A new, non-default cookie scheme (`SheebaSessionScheme`) backs the browser-redirect

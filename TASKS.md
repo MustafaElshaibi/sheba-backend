@@ -76,7 +76,7 @@ row in known-issues §1 by the same ID.
       dev for inspectability.
 - [ ] Password reset flow (OTP-gated) + account recovery rules in
       [docs/business-rules.md](docs/business-rules.md).
-- [ ] RP secret rotation endpoint + consent screen copy for `civil_data`.
+- [x] RP secret rotation endpoint + consent screen copy for `civil_data`.
 - [x] **T-OIDC-1** Implement `/connect/authorize` + consent *(High · L · deps: T-AUTH-2 ·
       issue: T-OIDC-1; pairs with the consent-screen bullet above)*: authorization-code + PKCE
       handler behind the already-enabled passthrough; login redirect for unauthenticated users;
@@ -91,6 +91,13 @@ row in known-issues §1 by the same ID.
       a stolen refresh token from the browser PKCE flow also gets cascade-revoked on reuse.
       AC: a refresh token minted via `/connect/authorize` behaves identically to one from the
       custom grants under `RotateRefreshTokenFamilyHandler`.
+- [ ] **T-OIDC-3** Fix `DELETE /api/admin/relying-parties/{clientId}` 500 *(Medium · S · deps:
+      none · issue: T-OIDC-3)*: `OpenIddict.EntityFrameworkCore` 5.7.0's `DeleteAsync` calls an EF
+      Core `ExecuteDeleteAsync` overload missing at runtime against EF Core 9.0.6
+      (`MissingMethodException`) — find the OpenIddict version actually compatible with EF Core 9
+      and bump the pin in `Directory.Packages.props`.
+      AC: deleting a registered relying party returns 204 and the row is gone; full test suite
+      still green after the version bump (shared package, broader regression risk than one route).
 - [ ] **T-ID-1** Account lifecycle completion *(High · M · deps: T-AUTH-2 · issue: T-ID-1)*:
       `Suspend`/`Reinstate`/`Deactivate` on the `Account` aggregate + admin endpoints (audited,
       citizen notified); persist the rejection reason; re-application path for Rejected accounts
