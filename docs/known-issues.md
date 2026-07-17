@@ -12,7 +12,6 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
 | ID | Gap | Impact | Where |
 |----|-----|--------|-------|
 | T-SEC-3 | Secrets via config/env; AES vault key has a derived dev fallback; dev signing certs even on production branch | Key compromise + no rotation story in practice | `IdentityModule.cs`, `AesGcmCredentialEncryptor.cs` |
-| T-SEC-4 | No signing-cert rotation procedure wired | JWKS rollover untested | Identity module |
 | T-SEC-6/7 | No DB-volume/column encryption for `form_data_json`; MinIO SSE off (T-DOC-2) | PII at rest relies on host security only | Postgres/MinIO deployment |
 | T-PAY-1 | Payment Application layer is **empty** (entities + repo only; mock flow) | No real order/refund lifecycle; workflow coupled via direct command instead of `PaymentCompletedEvent` | `Modules/Payment` |
 | T-AUD-1..3 | Audit is a plain table: no INSERT-only grant, no hash chain, no partitioning | "Tamper-evident" is aspirational today | `Modules/Audit` |
@@ -54,9 +53,16 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
    `UpgradeLoa3` flow and appointment infrastructure.
 4. **Retention numbers** — the 10-year post-closure snapshot retention is an assumption (A3), not
    a legal requirement; confirm when a data-protection regime lands.
-5. **Refresh-token custom family table vs OpenIddict-native tracking** — `RefreshTokenFamily`
-   duplicates part of what OpenIddict stores; decide single source when implementing T-SEC-4.
-   The implementation task for whichever mechanism wins is **T-SEC-9** (§1).
+5. **Refresh-token custom family table vs OpenIddict-native tracking** — **Decided (T-SEC-4):
+   keep `RefreshTokenFamily`.** OpenIddict's built-in rotation rejects a *replayed* (already-
+   redeemed) refresh token on its own, but that only blocks reuse of that one token — it doesn't
+   cascade-revoke every token an attacker may have already minted further down the same chain
+   before the legitimate reuse was detected. `RefreshTokenFamily` gives that cascade (§6.4's
+   "revoke the entire family on replay" claim), which is the RFC 9700 guidance the design
+   deliberately targets. The gap is that nothing wires the entity into the actual refresh-token
+   issuance path yet — `OidcEndpoints.IssueFromRefreshTokenAsync` just re-signs whatever principal
+   OpenIddict already validated, never touching `RefreshTokenFamily`. Implementation is
+   **T-SEC-9** (§1).
 6. **Push notifications** — brief lists email/SMS/push; push deferred until a mobile app exists.
 
 ## 4. Documentation notes

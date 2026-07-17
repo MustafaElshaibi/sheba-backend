@@ -47,7 +47,50 @@ re-encrypt → retire old key.
 - **Signing-key rotation by overlap** (T-SEC-4): register new cert alongside old → JWKS publishes
   both → new tokens signed with new key → old cert removed after max token lifetime + skew. RPs
   that cache JWKS honor `kid`. Emergency rotation = same procedure compressed; expect a wave of
-  401s tolerated by 15-min token TTL.
+  401s tolerated by 15-min token TTL. Runbook: §4.1.
+
+### 4.1 Certificate rotation runbook
+
+Certificates are configured via `Identity:SigningCertificates` / `Identity:EncryptionCertificates`
+— an ordered array; each entry is either `{ "Thumbprint": "...", "StoreName": "My",
+"StoreLocation": "CurrentUser" }` (loads from the OS/container certificate store — no secret in
+config, the preferred production shape) or `{ "Path": "...", "Password": "..." }` (a mounted PFX
+file; `Password` comes from an environment-injected secret, never a literal in
+`appsettings*.json`). An empty/unset list falls back to the ephemeral development certificate, so
+every environment today needs no configuration and behaves exactly as before this existed.
+Loading is `SigningCertificateLoader` (`Identity.Infrastructure/Security/`), covered by unit tests
+that round-trip real self-signed PFX files.
+
+Rotation-by-overlap procedure:
+
+1. Generate the new certificate (RSA 2048+, standard X.509 tooling) and get it into the target
+   store/mount without touching the currently-deployed config yet.
+2. Add the new certificate as the **first** entry in the relevant list, keeping the current
+   (soon-to-be-old) certificate as a later entry. Deploy.
+3. Verify: call `/connect/token`, decode the returned access token's JWT header, and confirm its
+   `kid` matches the new certificate's thumbprint. Also confirm `/.well-known/jwks` now lists
+   **both** public keys — RPs that cache JWKS must see both before the old key retires, or
+   they'll fail to validate tokens signed with whichever key they don't have cached. This step is
+   not optional: this doc does not assert which of several registered OpenIddict signing
+   credentials becomes the active signer, so treat step 3 as the authority, not step 2's list
+   order, until you've confirmed it once against the OpenIddict version in use.
+4. Wait at least the max outstanding token lifetime plus clock-skew margin — the longer of the
+   30-day refresh-token lifetime or any RP's cached-JWKS TTL, not just the 15-minute access-token
+   TTL — before touching the old certificate. Tokens signed by the old certificate before step 2
+   remain valid and must still verify during this window.
+5. Remove the old certificate from config, deploy again, and re-verify `/.well-known/jwks` now
+   lists only the new key.
+6. Emergency rotation (suspected key compromise) compresses steps 1-2 and skips the step-4 wait —
+   accept a wave of 401s from RPs holding a stale JWKS cache (bounded by the 15-min access-token
+   TTL) and force a full re-login by revoking active refresh-token families (`RefreshTokenFamily`,
+   T-SEC-9) instead of letting them silently refresh on the compromised key's trust.
+
+**Staging drill:** before relying on this in production, run steps 1–5 once against a
+non-production deployment with two throwaway self-signed certs and confirm an RP's token
+validation survives the mid-rotation window. Not yet executed against a live deployment as of
+T-SEC-4's landing — the loader itself is unit-tested against real certs, but the end-to-end drill
+(boot with two certs, hit `/connect/token`, inspect `kid` and JWKS) is still open; do it before the
+first real rotation.
 
 ## 5. Brute-force, OTP-abuse & rate limiting
 

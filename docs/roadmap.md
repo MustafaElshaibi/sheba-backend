@@ -44,7 +44,10 @@ authorization-guarded; audit trail active with PII redaction; module boundaries 
 - ~~**T-SEC-1** Enforce admin TOTP at login (secret already modeled).~~ Done — self-service
   enrollment/confirmation endpoints, recovery codes, and MFA-gated login; admins who haven't
   enrolled keep the password-only baseline.
-- **T-SEC-4** Signing-cert rotation-by-overlap procedure + docs + drill.
+- ~~**T-SEC-4** Signing-cert rotation-by-overlap procedure + docs + drill.~~ Done — config-driven
+  multi-cert loading (`SigningCertificateLoader`) + rotation runbook (security.md §4.1); decided
+  to keep `RefreshTokenFamily` over OpenIddict-native tracking (known-issues §3.5), implementation
+  is T-SEC-9. The runbook's live staging drill is still a pending pre-production checklist item.
 - Password reset flow (OTP-gated) & account recovery rules.
 - RP management polish: secret rotation endpoint, per-RP consent screen copy.
 - **T-AUTH-1** Ministry-Admin scoping claim + ownership policies end-to-end.

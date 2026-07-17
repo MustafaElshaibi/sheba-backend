@@ -7,6 +7,21 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Signing/encryption certificate rotation-by-overlap (T-SEC-4)**: `SigningCertificateLoader`
+  (`Identity.Infrastructure/Security/`) reads an ordered certificate list from
+  `Identity:SigningCertificates` / `Identity:EncryptionCertificates` config — each entry either a
+  thumbprint (loads from the OS/container cert store, no secret in config) or a PFX file path +
+  environment-injected password — and registers them with OpenIddict in array order (first entry
+  = intended primary signer). An empty/unset list (every environment today) falls back to the
+  ephemeral development certificate unchanged. Replaces the dead `IsProduction` branch in
+  `IdentityModule.cs` that called the same dev-cert method either way. Rotation runbook added at
+  [security.md §4.1](docs/security.md); the live staging drill itself is flagged as still pending
+  rather than claimed. Also **decided the open `RefreshTokenFamily` vs OpenIddict-native tracking
+  question** (known-issues §3.5): keep `RefreshTokenFamily` — OpenIddict's built-in rotation only
+  rejects a replayed token itself, not the RFC 9700 "revoke the whole family" cascade the design
+  targets — implementation is T-SEC-9. Covered by 7 new unit tests exercising the loader against
+  real self-signed PFX files (missing section, missing password, unknown thumbprint, multi-entry
+  precedence, round-trip).
 - **Admin TOTP enrollment + MFA-gated login (T-SEC-1)**: two new self-service endpoints under
   `/api/admin/mfa` (`AnyAdmin` policy, actor id always the caller's own token `sub`) —
   `POST /enroll` generates a TOTP secret (Otp.NET, RFC 6238 defaults) and stores it AES-256-GCM

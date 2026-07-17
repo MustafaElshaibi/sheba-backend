@@ -191,20 +191,28 @@ public static class IdentityModule
                 // default), and reuse of a consumed refresh token is rejected.
                 server.DisableAccessTokenEncryption();
 
-                // Signing/encryption certificates
-                if (IsProduction(configuration))
-                {
-                    // TODO Week 6: Load from Azure Key Vault / cert store
-                    // server.AddSigningCertificate(...);
-                    // server.AddEncryptionCertificate(...);
-                    server.AddDevelopmentSigningCertificate();
-                    server.AddDevelopmentEncryptionCertificate();
-                }
+                // Signing/encryption certificates — rotation-by-overlap (T-SEC-4). Each config
+                // list is precedence-ordered (first entry signs new tokens; every listed
+                // certificate still validates tokens it previously signed), loaded via
+                // Security.SigningCertificateLoader from Identity:SigningCertificates /
+                // Identity:EncryptionCertificates. Runbook: docs/security.md §4.1. Unconfigured
+                // (every environment today) falls back to the ephemeral development certificate,
+                // unchanged from before this feature existed.
+                var signingCertificates = Security.SigningCertificateLoader.Load(
+                    configuration, "Identity:SigningCertificates");
+                if (signingCertificates.Count > 0)
+                    foreach (var certificate in signingCertificates)
+                        server.AddSigningCertificate(certificate);
                 else
-                {
                     server.AddDevelopmentSigningCertificate();
+
+                var encryptionCertificates = Security.SigningCertificateLoader.Load(
+                    configuration, "Identity:EncryptionCertificates");
+                if (encryptionCertificates.Count > 0)
+                    foreach (var certificate in encryptionCertificates)
+                        server.AddEncryptionCertificate(certificate);
+                else
                     server.AddDevelopmentEncryptionCertificate();
-                }
 
                 // ASP.NET Core host integration
                 server.UseAspNetCore()
@@ -566,12 +574,6 @@ public static class IdentityModule
         await manager.CreateAsync(descriptor);
         logger.LogInformation("[IdentityModule] Seeded machine client: {ClientId}", clientId);
     }
-
-    private static bool IsProduction(IConfiguration configuration) =>
-        string.Equals(
-            configuration["ASPNETCORE_ENVIRONMENT"],
-            "Production",
-            StringComparison.OrdinalIgnoreCase);
 
     private static async Task SeedAdminUserAsync(IdentityDbContext db, ILogger logger)
     {

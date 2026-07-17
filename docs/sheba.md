@@ -420,7 +420,7 @@ No schema, no entities. Cross-cutting middleware set (§3.5) + the extraction se
 | Access token | JWT, RS256, **15 min** TTL (unencrypted in dev for inspectability; encrypted or reference tokens for external RPs in prod — T-SEC-5) |
 | Refresh token | 30 days, rotation on every use, family reuse-detection (§6.4) |
 | ID token claims | `sub`, `name`, `preferred_username`, `email`, `national_id_hash` (SHA-256 — the raw NID never leaves the Identity module in a token), `loa` |
-| Signing keys | Dev certs today; production: dedicated signing certs with overlapping rotation published via JWKS (§13.4, T-SEC-4) |
+| Signing keys | Dev cert when unconfigured; config-driven multi-cert loading + overlap rotation runbook implemented (§13.4, §4.1, T-SEC-4 closed) — production still needs real certs provisioned into the store/mount |
 
 **Why a custom grant instead of bending Resource Owner Password?** OAuth 2.1 drops the password
 grant entirely; a named extension grant (`urn:sheba:grant:national_id_otp`) is the
@@ -1159,7 +1159,7 @@ task-level checklist: [TASKS.md](../TASKS.md).
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
 | **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
-| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, signing-cert rotation (T-SEC-4), password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
+| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
 | **2 — Integration depth** | Webhook replay protection end-to-end (T-SRV-1), JSON-Schema form validation (T-SRV-2), OpenCRVS provider (T-INT-1), ministry health dashboard | A real external system round-trips a service request incl. async webhook |
 | **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
 | **4 — Audit & scale-readiness** | Audit hash-chain + INSERT-only + partitioning (T-AUD-1..3), BI rebuild tooling (T-ADM-1), test coverage to bar (testing.md), load test | Tamper-evidence demonstrable; p95 targets in [performance.md](performance.md) met |
@@ -1199,7 +1199,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2, CORS + correlation IDs T-GW-1); auth coverage gaps remain (T-AUTH-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |
 | R26 | Docker compose single server, segmented services, scaling story | §14 | — | Implemented |
-| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; T-SEC-1/2 closed; gaps T-SEC-3..9 remain (refresh-family revocation unimplemented — T-SEC-9) |
+| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; T-SEC-1/2/4 closed; gaps T-SEC-3, T-SEC-5..9 remain (refresh-family revocation unimplemented — T-SEC-9) |
 | R28 | eKYC + admin approval as core capability | §6.2 | Identity | Implemented |
 | R29 | SSO for government services | §6.7 | Identity | Implemented |
 | R30 | Document management | §5.5 | Document | Implemented |
