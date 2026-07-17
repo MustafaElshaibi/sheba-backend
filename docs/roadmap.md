@@ -41,7 +41,9 @@ authorization-guarded; audit trail active with PII redaction; module boundaries 
 
 ## Phase 1 — Identity completion
 
-- **T-SEC-1** Enforce admin TOTP at login (secret already modeled).
+- ~~**T-SEC-1** Enforce admin TOTP at login (secret already modeled).~~ Done — self-service
+  enrollment/confirmation endpoints, recovery codes, and MFA-gated login; admins who haven't
+  enrolled keep the password-only baseline.
 - **T-SEC-4** Signing-cert rotation-by-overlap procedure + docs + drill.
 - Password reset flow (OTP-gated) & account recovery rules.
 - RP management polish: secret rotation endpoint, per-RP consent screen copy.

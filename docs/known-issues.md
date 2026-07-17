@@ -11,7 +11,6 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
 
 | ID | Gap | Impact | Where |
 |----|-----|--------|-------|
-| T-SEC-1 | Admin TOTP modeled (`mfa_secret`) but not enforced at login | Admin accounts are password-only | Identity module |
 | T-SEC-3 | Secrets via config/env; AES vault key has a derived dev fallback; dev signing certs even on production branch | Key compromise + no rotation story in practice | `IdentityModule.cs`, `AesGcmCredentialEncryptor.cs` |
 | T-SEC-4 | No signing-cert rotation procedure wired | JWKS rollover untested | Identity module |
 | T-SEC-6/7 | No DB-volume/column encryption for `form_data_json`; MinIO SSE off (T-DOC-2) | PII at rest relies on host security only | Postgres/MinIO deployment |

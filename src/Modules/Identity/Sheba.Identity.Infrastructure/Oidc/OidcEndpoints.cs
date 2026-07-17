@@ -36,8 +36,8 @@ public static class OidcEndpoints
 
     // Admin authentication is a distinct grant issuing a distinct principal (§10.1: AdminUser is
     // never the same principal as a citizen Account, even for the SuperAdmin who is also a
-    // citizen). No OTP round-trip yet — mandatory admin TOTP is designed but deferred (T-SEC-1);
-    // this grant is the password-only baseline it will sit in front of.
+    // citizen). Admins who have completed TOTP enrollment (T-SEC-1) must also supply mfa_code —
+    // enforced in LoginAdminHandler, not here, so the OIDC layer stays a thin transport.
     public const string ShebaAdminGrantType = "urn:sheba:grant:admin_password";
 
     public static WebApplication MapOidcEndpoints(this WebApplication app)
@@ -129,19 +129,20 @@ public static class OidcEndpoints
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    // urn:sheba:grant:admin_password — admin: employee_id_or_email + password → tokens.
-    // A separate principal type from the citizen grant above (§10.1) — the role claim carries the
-    // AdminUser's specific sub-role (SuperAdmin, IdentityReviewer, ...), which authorization
-    // policies match against.
+    // urn:sheba:grant:admin_password — admin: employee_id_or_email + password (+ mfa_code once
+    // enrolled) → tokens. A separate principal type from the citizen grant above (§10.1) — the
+    // role claim carries the AdminUser's specific sub-role (SuperAdmin, IdentityReviewer, ...),
+    // which authorization policies match against.
     private static async Task<IResult> IssueAdminTokenAsync(OpenIddictRequest request, IMediator mediator)
     {
         var identifier = request.GetParameter("employee_id_or_email")?.Value?.ToString();
         var password = request.GetParameter("password")?.Value?.ToString();
+        var mfaCode = request.GetParameter("mfa_code")?.Value?.ToString();
 
         if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(password))
             return TokenError(Errors.InvalidRequest, "employee_id_or_email and password are required for this grant.");
 
-        var result = await mediator.Send(new LoginAdminCommand(identifier, password));
+        var result = await mediator.Send(new LoginAdminCommand(identifier, password, mfaCode));
         if (result.IsFailure)
             return TokenError(Errors.InvalidGrant, result.Error!.Message);
 

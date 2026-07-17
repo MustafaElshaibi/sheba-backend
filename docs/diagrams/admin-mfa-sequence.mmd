@@ -1,0 +1,44 @@
+%% Sheba — admin TOTP enrollment + MFA-gated login (T-SEC-1)
+%% docs/sheba.md §6.9
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant P as Admin Portal (RP: sheba-admin)
+    participant OIDC as OpenIddict /connect/token
+    participant API as Sheba.Api /api/admin/mfa
+    participant DB as identity schema
+
+    Note over A,DB: Enrollment (one-time, requires an existing password-only session)
+    P->>OIDC: grant_type=admin_password\nemployee_id_or_email + password
+    OIDC-->>P: access_token (MFA not yet enabled)
+    P->>API: POST /api/admin/mfa/enroll (Bearer token)
+    API->>API: generate TOTP secret, encrypt (AES-256-GCM)
+    API->>DB: store AdminUser.MfaSecret (unconfirmed)
+    API-->>P: secret + otpauth:// provisioning URI
+    P-->>A: render QR code
+    A->>A: scan with authenticator app
+    P->>API: POST /api/admin/mfa/verify { totpCode }
+    API->>API: verify code against decrypted secret
+    alt invalid code
+        API-->>P: JSend fail (mfa)
+    end
+    API->>DB: MfaEnabled = true, store 10 hashed recovery codes
+    API-->>P: JSend success { recoveryCodes: [...] } (shown once)
+    P-->>A: "save these recovery codes"
+
+    Note over A,DB: Every login thereafter
+    P->>OIDC: grant_type=admin_password\nemployee_id_or_email + password
+    OIDC->>DB: verify password
+    OIDC->>DB: MfaEnabled? yes
+    alt mfa_code omitted
+        OIDC-->>P: JSend fail (mfa_required, 400 invalid_grant)
+    end
+    A->>P: enters live TOTP code (or a recovery code)
+    P->>OIDC: grant_type=admin_password\n...+ mfa_code
+    OIDC->>DB: verify TOTP (±1 step drift) or consume an unused recovery code
+    alt code invalid
+        OIDC-->>P: JSend fail (mfa)\nMfaFailedAttempts++, lock after 5
+    end
+    OIDC->>DB: reset MFA failure counters, record login
+    OIDC-->>P: access_token + id_token + refresh_token
+    P-->>A: signed in

@@ -12,6 +12,8 @@ using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 using Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 using Sheba.Identity.Application.Commands.CompleteRegistration;
+using Sheba.Identity.Application.Commands.ConfirmAdminMfa;
+using Sheba.Identity.Application.Commands.EnrollAdminMfa;
 using Sheba.Identity.Application.Commands.LoginCitizen;
 using Sheba.Identity.Application.Commands.RegisterCitizen;
 using Sheba.Identity.Application.Commands.RejectIdentityRequest;
@@ -321,6 +323,31 @@ public static class IdentityModule
         .WithName("RequestLoaUpgrade")
         .WithSummary("Request a Level-of-Assurance upgrade (LoA 2/3) for your own account — enters the admin review queue.");
 
+        // ── Admin self-service MFA (T-SEC-1) ──────────────────────────────────
+        // AnyAdmin, not a specific role — every admin manages their own second factor regardless
+        // of sub-role. AdminId always comes from the caller's own token, never the body.
+        var adminMfa = app.MapGroup("/api/admin/mfa").WithTags("Admin — MFA").RequireAuthorization("AnyAdmin")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        adminMfa.MapPost("/enroll", async (
+            ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new EnrollAdminMfaCommand(user.RequireSubjectId()), ct);
+            return result.ToHttpResult();
+        })
+        .WithName("EnrollAdminMfa")
+        .WithSummary("Step 1: generate a TOTP secret for the calling admin (unconfirmed until /verify).");
+
+        adminMfa.MapPost("/verify", async (
+            ConfirmAdminMfaBody body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(
+                new ConfirmAdminMfaCommand(user.RequireSubjectId(), body.TotpCode), ct);
+            return result.ToHttpResult();
+        })
+        .WithName("ConfirmAdminMfa")
+        .WithSummary("Step 2: confirm enrollment with a live code — enables MFA and issues recovery codes.");
+
         // ── Admin identity-request review queue ───────────────────────────────
         var admin = app.MapGroup("/api/admin/identity-requests")
             .WithTags("Admin — Identity Requests")
@@ -390,6 +417,9 @@ public static class IdentityModule
 
     /// <summary>Request body for the LoA upgrade endpoint — AccountId is never client-supplied.</summary>
     public sealed record LoaUpgradeBody(int TargetLevel);
+
+    /// <summary>Request body for the MFA confirm endpoint — AdminId is never client-supplied.</summary>
+    public sealed record ConfirmAdminMfaBody(string TotpCode);
 
     /// <summary>Request body for the approve endpoint — the reviewer id comes from the token.</summary>
     public sealed record ApproveIdentityRequestBody(string? Notes = null);

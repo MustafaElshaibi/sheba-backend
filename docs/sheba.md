@@ -168,7 +168,7 @@ flowchart TB
 
 | Module | Schema | Route groups | Role |
 |--------|--------|-------------|------|
-| Identity | `identity` | `/api/identity`, `/connect/*`, `/api/admin/identity-requests`, `/api/admin/relying-parties` | OIDC provider, eKYC, approvals, RP registry |
+| Identity | `identity` | `/api/identity`, `/connect/*`, `/api/admin/identity-requests`, `/api/admin/relying-parties`, `/api/admin/mfa` | OIDC provider, eKYC, approvals, RP registry, admin MFA |
 | Citizen | `citizen` | `/api/citizens` | Extended citizen profile |
 | Ministry | `ministry` | `/api/ministry` | Integration registry + credential vault |
 | ServiceRequest | `service_req` | `/api/services`, `/api/requests`, `/api/admin/services`, `/api/admin/requests` | Catalog + workflow engine |
@@ -581,6 +581,78 @@ credential types are supported for legacy ministry callers via the webhook recei
 verification (§7.4) — but token-based auth is the recommended default for anything that can hold a
 secret and rotate it.
 
+### 6.9 Admin TOTP enrollment & MFA gate (T-SEC-1)
+
+Source: [diagrams/admin-mfa-sequence.mmd](diagrams/admin-mfa-sequence.mmd)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant P as Admin Portal (RP: sheba-admin)
+    participant OIDC as OpenIddict /connect/token
+    participant API as Sheba.Api /api/admin/mfa
+    participant DB as identity schema
+
+    Note over A,DB: Enrollment (one-time, requires an existing password-only session)
+    P->>OIDC: grant_type=admin_password\nemployee_id_or_email + password
+    OIDC-->>P: access_token (MFA not yet enabled)
+    P->>API: POST /api/admin/mfa/enroll (Bearer token)
+    API->>API: generate TOTP secret, encrypt (AES-256-GCM)
+    API->>DB: store AdminUser.MfaSecret (unconfirmed)
+    API-->>P: secret + otpauth:// provisioning URI
+    P-->>A: render QR code
+    A->>A: scan with authenticator app
+    P->>API: POST /api/admin/mfa/verify { totpCode }
+    API->>API: verify code against decrypted secret
+    alt invalid code
+        API-->>P: JSend fail (mfa)
+    end
+    API->>DB: MfaEnabled = true, store 10 hashed recovery codes
+    API-->>P: JSend success { recoveryCodes: [...] } (shown once)
+    P-->>A: "save these recovery codes"
+
+    Note over A,DB: Every login thereafter
+    P->>OIDC: grant_type=admin_password\nemployee_id_or_email + password
+    OIDC->>DB: verify password
+    OIDC->>DB: MfaEnabled? yes
+    alt mfa_code omitted
+        OIDC-->>P: JSend fail (mfa_required, 400 invalid_grant)
+    end
+    A->>P: enters live TOTP code (or a recovery code)
+    P->>OIDC: grant_type=admin_password\n...+ mfa_code
+    OIDC->>DB: verify TOTP (±1 step drift) or consume an unused recovery code
+    alt code invalid
+        OIDC-->>P: JSend fail (mfa)\nMfaFailedAttempts++, lock after 5
+    end
+    OIDC->>DB: reset MFA failure counters, record login
+    OIDC-->>P: access_token + id_token + refresh_token
+    P-->>A: signed in
+```
+
+Enrollment is two self-service steps (`AnyAdmin` policy; the acting `AdminId` always comes from
+the caller's own token `sub`, never a body/route parameter — one admin cannot enroll MFA on
+another's account). `POST /api/admin/mfa/enroll` generates a 160-bit secret (Otp.NET: SHA1,
+6 digits, 30-second step — the RFC 6238 defaults every mainstream authenticator app assumes) and
+stores it encrypted (AES-256-GCM, the same primitive as Ministry's credential vault; the
+encryptor is duplicated locally in Identity.Infrastructure rather than shared, per the
+module-boundary rule that a module depends on Shared.Kernel only) but **unconfirmed** —
+`AdminUser.MfaEnabled` stays `false` until `POST /api/admin/mfa/verify` proves the authenticator
+app actually has the secret with a live code. Confirmation also issues 10 single-use recovery
+codes (CSPRNG, Argon2id-hashed, shown exactly once) for a lost-device fallback.
+
+Admins who have not yet enrolled keep the password-only baseline — enrollment itself requires an
+authenticated admin token, so it cannot be a login precondition (this is the standard "opt-in
+until enrolled, mandatory once enrolled" 2FA rollout pattern, not a policy gap). Once
+`MfaEnabled` is `true`, the `admin_password` grant additionally requires a valid `mfa_code` (a
+live TOTP code, or an unused recovery code) in the same token request as the password; a
+missing/wrong code fails with a distinguishable JSend `fail` key (`mfa_required` vs `mfa`) —
+revealing that a code is needed is safe here because it only happens after the password has
+already been proven correct, unlike the pre-auth registration oracle BR-ON-3 guards against. Five
+consecutive invalid MFA attempts lock the second factor for `2^(n-4)` minutes — the same
+exponential formula BR-LG-3 uses for password lockout, applied to the new attack surface a
+brute-forceable 6-digit code introduces.
+
 ---
 
 ## 7. Ministry Integration Framework
@@ -978,7 +1050,8 @@ HMAC-SHA256 + timestamp window + delivery-id dedup (§7.4).
 JWKS-published signing keys rotate by overlap: introduce new cert, publish both, sign with new,
 retire old after max token lifetime (OpenIddict supports multiple registered certs natively).
 Refresh-token families with reuse-revocation (§6.4). Access tokens 15 min. Admin sessions:
-mandatory TOTP (secret stored encrypted; enforcement is T-SEC-1).
+mandatory TOTP once enrolled (secret stored encrypted; self-service enrollment + recovery codes,
+§6.9 — T-SEC-1 closed).
 
 ### 13.5 STRIDE summary (auth flows)
 
@@ -1086,7 +1159,7 @@ task-level checklist: [TASKS.md](../TASKS.md).
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
 | **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
-| **1 — Identity completion** | Admin TOTP (T-SEC-1), signing-cert rotation (T-SEC-4), password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
+| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, signing-cert rotation (T-SEC-4), password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
 | **2 — Integration depth** | Webhook replay protection end-to-end (T-SRV-1), JSON-Schema form validation (T-SRV-2), OpenCRVS provider (T-INT-1), ministry health dashboard | A real external system round-trips a service request incl. async webhook |
 | **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
 | **4 — Audit & scale-readiness** | Audit hash-chain + INSERT-only + partitioning (T-AUD-1..3), BI rebuild tooling (T-ADM-1), test coverage to bar (testing.md), load test | Tamper-evidence demonstrable; p95 targets in [performance.md](performance.md) met |
@@ -1126,7 +1199,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2, CORS + correlation IDs T-GW-1); auth coverage gaps remain (T-AUTH-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |
 | R26 | Docker compose single server, segmented services, scaling story | §14 | — | Implemented |
-| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; gaps T-SEC-1..9 (refresh-family revocation unimplemented — T-SEC-9) |
+| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; T-SEC-1/2 closed; gaps T-SEC-3..9 remain (refresh-family revocation unimplemented — T-SEC-9) |
 | R28 | eKYC + admin approval as core capability | §6.2 | Identity | Implemented |
 | R29 | SSO for government services | §6.7 | Identity | Implemented |
 | R30 | Document management | §5.5 | Document | Implemented |
@@ -1149,7 +1222,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | OTP SMS cost-flooding attack | Medium | Medium | Issuance caps + per-IP limits + provider spend alarms (§13.2) |
 | Admin-approval queue becomes the bottleneck at scale | Medium | Medium | Risk-scored triage (auto-flag anomalies), reviewer sub-roles, SLA metrics already in BI model |
 | Single-server SPOF | Certain (by design) | Medium at pilot | Nightly off-box backups + documented restore; scale ladder §14.2 when uptime demands it |
-| Insider admin abuse | Low | High | Least-privilege sub-roles, mandatory TOTP (T-SEC-1), attributed audit rows, hash-chained log (T-AUD-2), Auditor role separation |
+| Insider admin abuse | Low | High | Least-privilege sub-roles, mandatory TOTP (T-SEC-1 closed for enrolled admins, §6.9), attributed audit rows, hash-chained log (T-AUD-2), Auditor role separation |
 | JSend retrofit breaks existing frontend consumers | Medium | Low | Single wrapper filter = single switch; version the flip with the frontend team; Swagger reflects envelopes |
 | Key/certificate mismanagement | Medium | High | Rotation-by-overlap procedure documented (§13.4); secrets store (T-SEC-3); dev certs never in prod images |
 

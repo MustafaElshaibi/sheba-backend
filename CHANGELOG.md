@@ -7,6 +7,26 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Admin TOTP enrollment + MFA-gated login (T-SEC-1)**: two new self-service endpoints under
+  `/api/admin/mfa` (`AnyAdmin` policy, actor id always the caller's own token `sub`) —
+  `POST /enroll` generates a TOTP secret (Otp.NET, RFC 6238 defaults) and stores it AES-256-GCM
+  encrypted but unconfirmed; `POST /verify` proves the authenticator app has it with a live code,
+  flips `AdminUser.MfaEnabled` on, and issues 10 single-use recovery codes (CSPRNG,
+  Argon2id-hashed, shown once). Once enabled, the `urn:sheba:grant:admin_password` OIDC grant
+  requires a valid `mfa_code` (live TOTP or an unused recovery code) alongside the password —
+  missing/wrong codes fail with distinguishable JSend keys (`mfa_required` vs `mfa`) so a client
+  can re-prompt; five consecutive invalid codes lock the second factor for `2^(n-4)` minutes,
+  mirroring the existing password-lockout formula (BR-LG-3). Admins who haven't enrolled keep the
+  password-only baseline — enrollment requires an authenticated admin token, so it can't be a
+  login precondition. New `AdminRecoveryCode` entity + `admin_recovery_codes` table
+  (migration `AddAdminMfaSupport`); new `IMfaSecretEncryptor`/`ITotpService` ports in
+  `Sheba.Identity.Domain.Interfaces` with AES-GCM/Otp.NET implementations in
+  Identity.Infrastructure. Covered by 33 new unit tests: `AdminUser`/`AdminRecoveryCode` domain
+  state machine, `LoginAdminHandler`'s MFA gate (all pass/fail/lockout branches),
+  `EnrollAdminMfaHandler`/`ConfirmAdminMfaHandler`, and AES-GCM round-trip/tamper +
+  Otp.NET service round-trip coverage. See [sheba.md
+  §6.9](docs/sheba.md#69-admin-totp-enrollment--mfa-gate-t-sec-1) for the full enrollment +
+  login sequence.
 - **Module boundaries restored (T-ARC-1)**: every one of the 10 modules' `.csproj` files now
   references only `Sheba.Shared.Kernel` (plus its own Domain/Application layer) — zero
   cross-module `ProjectReference`s remain anywhere in the solution, verified by a full sweep of

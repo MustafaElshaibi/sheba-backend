@@ -64,7 +64,7 @@ row in known-issues §1 by the same ID.
 
 ## Phase 1 — Identity completion
 
-- [ ] **T-SEC-1** Enforce TOTP at admin login (secret already on `AdminUser`; add enrollment +
+- [x] **T-SEC-1** Enforce TOTP at admin login (secret already on `AdminUser`; add enrollment +
       verification step; recovery codes).
 - [ ] **T-SEC-4** Signing-cert rotation-by-overlap: config for multiple certs, rotation runbook in
       [docs/security.md](docs/security.md) §4, staging drill. Decide the open question on

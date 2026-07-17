@@ -61,9 +61,13 @@ Successful login resets counters.
 code and requires re-issuance (rate-limited: max 3 issuances per 15 minutes per account).
 **BR-LG-5** Tokens: access 15 min; refresh 30 days with rotation; refresh-token reuse revokes the
 whole family (assumed theft).
-**BR-LG-6** Admin users are separate principals from citizen accounts. Admin login requires TOTP
-(target: T-SEC-1). A System Admin acting as a citizen uses their citizen account and citizen
-tokens.
+**BR-LG-6** Admin users are separate principals from citizen accounts. Once an admin has enrolled
+TOTP (self-service: `POST /api/admin/mfa/enroll` then `/verify`, [sheba.md
+§6.9](sheba.md#69-admin-totp-enrollment--mfa-gate-t-sec-1)), login requires a valid code — a live
+TOTP code or a single-use recovery code — in the same request as the password; un-enrolled admins
+keep the password-only baseline. 5 consecutive invalid codes lock the second factor for
+`2^(n-4)` minutes, mirroring BR-LG-3. A System Admin acting as a citizen uses their citizen
+account and citizen tokens.
 
 ## 3. Levels of assurance
 

@@ -9,8 +9,10 @@
   `urn:sheba:grant:national_id_otp`; browser SSO via `/connect/authorize` + PKCE
   ([sheba.md §6.3](sheba.md#63-login-flow-password--sms-otp)). OAuth 2.1 alignment: no implicit,
   no password grant, PKCE required for public clients.
-- **Admin:** separate `AdminUser` principal, password + TOTP (secret stored encrypted;
-  enforcement gap **T-SEC-1**), `admin_api` scope/audience.
+- **Admin:** separate `AdminUser` principal, password + TOTP once enrolled (secret stored
+  encrypted, AES-256-GCM; self-service enrollment + recovery codes, [sheba.md
+  §6.9](sheba.md#69-admin-totp-enrollment--mfa-gate-t-sec-1) — **T-SEC-1** closed), `admin_api`
+  scope/audience.
 - **Machine (ministries/RPs):** `client_credentials` with scope allowlists; static API key /
   basic auth accepted only for legacy inbound webhook callers.
 
