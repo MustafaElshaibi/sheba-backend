@@ -33,7 +33,7 @@ public sealed class RotateRefreshTokenFamilyHandler(
 
         if (request.PresentedGeneration != family.Generation)
         {
-            family.Revoke("Refresh token reuse detected: stale generation presented.");
+            family.Revoke("Refresh-token reuse detected: stale generation");
             await repository.SaveChangesAsync(ct);
             logger.LogWarning(
                 "[RotateRefreshTokenFamily] Reuse detected for FamilyId={FamilyId}: presented " +

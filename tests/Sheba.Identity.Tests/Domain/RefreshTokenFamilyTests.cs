@@ -63,4 +63,20 @@ public sealed class RefreshTokenFamilyTests
         act.Should().NotThrow();
         family.RevocationReason.Should().Be("first reason"); // first revocation wins
     }
+
+    [Fact]
+    public void Revoke_ReasonLongerThanColumnWidth_TruncatesInsteadOfFailingLater()
+    {
+        // The revocation_reason column is varchar(50) (MiscConfigurations). Found live: this
+        // exact call site ("Refresh token reuse detected: stale generation presented." — 57
+        // chars) overflowed it and threw a DbUpdateException on the reuse-detection path itself,
+        // meaning a real replay attempt left the family NOT revoked instead of revoked.
+        var family = MakeFamily();
+        var oversized = new string('x', 80);
+
+        family.Revoke(oversized);
+
+        family.RevocationReason.Should().HaveLength(50);
+        family.RevocationReason.Should().Be(new string('x', 50));
+    }
 }

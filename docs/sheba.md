@@ -747,6 +747,33 @@ real gap during development: `/connect/token` had no `authorization_code` grant 
 (only the two custom grants + refresh_token) — the consent/PKCE plumbing was correct but nothing
 could redeem the code it produced until that branch was added.
 
+**T-OIDC-2 closed**: `IssueAuthorizationCode` now calls the same `AttachRefreshFamilyClaimsAsync`
+helper `OidcEndpoints`'s two custom grants use, so a refresh token minted through this browser
+flow gets `family_id`/`family_generation` claims and participates in T-SEC-9's cascade-revocation
+exactly like the others (known-issues.md §3 decision 5 has the confirmed reachability details —
+sequential replay is actually caught by OpenIddict's own token store first; the family check
+exists for the race condition that short-circuit doesn't cover).
+
+Verifying this live surfaced two pre-existing bugs, both fixed in the same change:
+
+- `POST /api/identity/session/establish` copied the caller's bearer-token claims **verbatim**
+  into the session cookie, including OpenIddict's own internal bookkeeping claims (`oi_prst`,
+  `oi_au_id`, `oi_tkn_id`, `client_id`, `scope`, `aud`, `exp`, `iat`, `iss`, `jti`, `nbf`). Because
+  `IssueAuthorizationCode` in turn copies the cookie's claims into the new authorization-code
+  principal, the stale `oi_prst` (presenters) claim from whatever client originally issued the
+  bearer token survived into the new code — and OpenIddict rejects the resulting token exchange
+  with "issued to a different client application" the moment the RP doing `/connect/authorize`
+  differs from that original client. This is the ordinary case for every third-party RP (the
+  citizen's original login session and the RP's `client_id` are never the same client), so the
+  bug was latent in the core SSO path until caught here. Fixed by filtering `EstablishSession`'s
+  claim copy to exclude OpenIddict's private/transactional claims (`IdentityModule.cs`).
+- `RotateRefreshTokenFamilyHandler`'s reuse-detection revocation reason ("Refresh token reuse
+  detected: stale generation presented.", 57 chars) exceeded the `revocation_reason` column's
+  `varchar(50)` — the exact code path meant to defend against token theft threw a
+  `DbUpdateException` instead of revoking, i.e. failed in the direction that leaves the family
+  *not* revoked. Fixed by shortening the message and adding a defensive truncation in
+  `RefreshTokenFamily.Revoke()` so this class of bug can't resurface silently.
+
 ---
 
 ## 7. Ministry Integration Framework

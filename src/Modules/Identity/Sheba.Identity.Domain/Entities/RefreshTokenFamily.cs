@@ -60,6 +60,8 @@ public sealed class RefreshTokenFamily : BaseEntity
         Touch();
     }
 
+    private const int RevocationReasonMaxLength = 50; // must match MiscConfigurations' column width
+
     /// <summary>
     /// Kills the whole family — every request against it fails from now on, even one carrying
     /// the legitimate current generation, until the subject signs in again. Idempotent: reuse
@@ -72,7 +74,13 @@ public sealed class RefreshTokenFamily : BaseEntity
             return;
 
         RevokedAt = DateTime.UtcNow;
-        RevocationReason = reason;
+        // Truncate rather than let an oversized reason fail the save: this runs on the reuse-
+        // detection path, where the whole point is that the family ends up revoked even under a
+        // live replay attempt — a thrown DbUpdateException here would leave the family NOT
+        // revoked, i.e. fail exactly the wrong way for a security control.
+        RevocationReason = reason is { Length: > RevocationReasonMaxLength }
+            ? reason[..RevocationReasonMaxLength]
+            : reason;
         Touch();
     }
 }

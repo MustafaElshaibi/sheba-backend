@@ -376,7 +376,24 @@ public static class IdentityModule
             // bridges the existing API-based login (password + OTP, custom grant) to the
             // cookie-based session /connect/authorize needs for the browser-redirect PKCE flow.
             // No new authentication happens here; RequireAuthorization above already proved it.
-            var identity = new ClaimsIdentity(user.Claims, Oidc.AuthorizeEndpoints.SheebaSessionScheme);
+            //
+            // Deliberately excludes OpenIddict's own transaction-bookkeeping claims (the "oi_*"
+            // private claims — presenters, token id, authorization id — plus client_id/scope/
+            // aud/exp/iat/iss/jti/nbf) rather than copying user.Claims verbatim. Those describe
+            // the ORIGINAL bearer token's client and lifetime, not the citizen's identity, and
+            // AuthorizeEndpoints.IssueAuthorizationCode copies this cookie's claims wholesale into
+            // a NEW authorization code for whatever client is calling /connect/authorize — if the
+            // stale "oi_prst" (presenters) claim survives that copy, OpenIddict rejects the
+            // resulting code exchange with "issued to a different client application" the moment
+            // that client differs from the one that originally issued the bearer token, i.e. for
+            // every third-party RP. Found live while verifying T-OIDC-2.
+            var identityClaims = user.Claims.Where(c =>
+                !c.Type.StartsWith("oi_", StringComparison.Ordinal) &&
+                c.Type is not (OpenIddictConstants.Claims.Audience or OpenIddictConstants.Claims.ExpiresAt
+                    or OpenIddictConstants.Claims.IssuedAt or OpenIddictConstants.Claims.Issuer
+                    or OpenIddictConstants.Claims.JwtId or OpenIddictConstants.Claims.NotBefore
+                    or OpenIddictConstants.Claims.Scope or OpenIddictConstants.Claims.ClientId));
+            var identity = new ClaimsIdentity(identityClaims, Oidc.AuthorizeEndpoints.SheebaSessionScheme);
             await context.SignInAsync(Oidc.AuthorizeEndpoints.SheebaSessionScheme, new ClaimsPrincipal(identity));
             return Results.Ok(new { established = true });
         })

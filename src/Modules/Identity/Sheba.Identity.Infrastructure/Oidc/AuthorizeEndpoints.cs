@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using MediatR;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -53,7 +54,7 @@ public static class AuthorizeEndpoints
     }
 
     private static async Task<IResult> HandleAuthorizeAsync(
-        HttpContext context, IConnectionMultiplexer redis, IConfiguration configuration)
+        HttpContext context, IConnectionMultiplexer redis, IConfiguration configuration, IMediator mediator)
     {
         var request = context.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenIddict authorization request cannot be retrieved.");
@@ -84,7 +85,7 @@ public static class AuthorizeEndpoints
                 return Results.Redirect($"/connect/consent{context.Request.QueryString}");
         }
 
-        return IssueAuthorizationCode(auth.Principal, requestedScopes);
+        return await IssueAuthorizationCode(auth.Principal, requestedScopes, request.ClientId, mediator);
     }
 
     private static async Task<IResult> HandleConsentPromptAsync(HttpContext context)
@@ -129,7 +130,8 @@ public static class AuthorizeEndpoints
 
     // Reuses the claims already proven for the cookie session — no re-validation of who the
     // subject is, only which scopes this specific grant carries.
-    private static IResult IssueAuthorizationCode(ClaimsPrincipal cookiePrincipal, IEnumerable<string> requestedScopes)
+    private static async Task<IResult> IssueAuthorizationCode(
+        ClaimsPrincipal cookiePrincipal, IEnumerable<string> requestedScopes, string? clientId, IMediator mediator)
     {
         var identity = new ClaimsIdentity(
             cookiePrincipal.Claims,
@@ -139,8 +141,15 @@ public static class AuthorizeEndpoints
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(requestedScopes);
 
-        foreach (var claim in principal.Claims)
-            claim.SetDestinations(Destinations.AccessToken, Destinations.IdentityToken);
+        OidcEndpoints.SetDestinationsForAll(principal);
+
+        // T-OIDC-2: attach family_id/family_generation the same way the two custom grants do
+        // (OidcEndpoints.AttachRefreshFamilyClaimsAsync), so a refresh token minted via this
+        // browser PKCE flow gets cascade-revoke-on-reuse protection too, not just individual
+        // rejection. Must run after the destinations loop above — see that helper's own comment
+        // on why these two claims stay off the JWT.
+        if (Guid.TryParse(cookiePrincipal.FindFirst(Claims.Subject)?.Value, out var subjectId))
+            await OidcEndpoints.AttachRefreshFamilyClaimsAsync(identity, principal, subjectId, clientId, mediator);
 
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }

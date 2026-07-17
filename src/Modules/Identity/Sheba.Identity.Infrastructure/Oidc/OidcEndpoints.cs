@@ -237,7 +237,9 @@ public static class OidcEndpoints
     // (every claim, regardless of destination) on every future refresh, which is how these two
     // claims survive across redemptions despite this endpoint never seeing the raw refresh token
     // value OpenIddict mints after it returns.
-    private static async Task AttachRefreshFamilyClaimsAsync(
+    // internal (not private): AuthorizeEndpoints.IssueAuthorizationCode reuses this for the
+    // browser PKCE flow (T-OIDC-2) so both issuance paths get identical family tracking.
+    internal static async Task AttachRefreshFamilyClaimsAsync(
         ClaimsIdentity identity, ClaimsPrincipal principal, Guid subjectId, string? clientId, IMediator mediator)
     {
         if (!principal.HasScope(Scopes.OfflineAccess) || string.IsNullOrEmpty(clientId))
@@ -296,11 +298,23 @@ public static class OidcEndpoints
                 [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description
             }));
 
-    // Every claim is emitted into both the access token and the id token for the demo.
-    private static void SetDestinationsForAll(ClaimsPrincipal principal)
+    // Internal-only bookkeeping claims that must never get a token destination — see
+    // AttachRefreshFamilyClaimsAsync. Named explicitly (rather than relying on call ordering)
+    // because IssueFromAuthorizationCodeAsync re-runs this over a principal OpenIddict restored
+    // from the stored authorization code, which may already carry these two claims if
+    // AuthorizeEndpoints.IssueAuthorizationCode attached them (T-OIDC-2) — an ordering-only rule
+    // would silently leak them into the JWT at redemption time.
+    private static readonly HashSet<string> InternalOnlyClaimTypes = new() { "family_id", "family_generation" };
+
+    // Every other claim is emitted into both the access token and the id token for the demo.
+    // internal: AuthorizeEndpoints reuses this so both issuance paths apply the identical rule.
+    internal static void SetDestinationsForAll(ClaimsPrincipal principal)
     {
         foreach (var claim in principal.Claims)
         {
+            if (InternalOnlyClaimTypes.Contains(claim.Type))
+                continue;
+
             claim.SetDestinations(Destinations.AccessToken, Destinations.IdentityToken);
         }
     }

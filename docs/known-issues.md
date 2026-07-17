@@ -28,7 +28,6 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
 | T-SEC-8 | **Medium** — OTP codes are generated inside `IOtpProvider.SendAsync` (which returns the raw code to the caller), contradicting §6.6's rule that generation/policy live in the application layer and providers only deliver | A provider swap can weaken OTP policy | `IOtpProvider.cs` + OTP adapters |
 | T-WAL-1 | **Medium** — VC signing key is ephemeral when `Wallet:IssuerPrivateKeyPem` is unset: a fresh RSA key is generated per process, so previously issued credentials become unverifiable after a restart; no production fail-fast | Issued VCs silently invalidated | `RsaCredentialSigner.cs` |
 | T-MIN-1 | **Low** — No ministry seed data: the demo catalog references five hardcoded ministry GUIDs that exist in no table; `MinistryEndpoint.RateLimitPerMinute` is stored but never enforced on outbound calls | Seeded ministry-call workflows cannot resolve a ministry; per-endpoint limits inert | `ServiceRequestModule.SeedServiceCatalogAsync`, `MinistryCallStepHandler` |
-| T-OIDC-2 | **Low** — Refresh tokens issued via the browser `/connect/authorize` + PKCE flow (T-OIDC-1) don't get T-SEC-9 family-reuse tracking — only the two custom grants (`IssueCitizenTokenAsync`/`IssueAdminTokenAsync`) attach `family_id`/`family_generation` claims. An authorize-flow refresh token still rotates correctly (OpenIddict default) but a stolen one wouldn't trigger family-wide revocation | Reuse of an authorize-flow refresh token is only individually rejected, not cascaded | `AuthorizeEndpoints.IssueAuthorizationCode` |
 | T-OIDC-3 | **Medium** — `DELETE /api/admin/relying-parties/{clientId}` throws 500: `OpenIddict.EntityFrameworkCore` 5.7.0's `ApplicationStore.DeleteAsync` calls an EF Core `ExecuteDeleteAsync` overload that doesn't exist at runtime against `Microsoft.EntityFrameworkCore.Relational` 9.0.6 (`MissingMethodException`) — a binary-compatibility gap between the pinned OpenIddict and EF Core versions. Found live while testing the new rotate-secret endpoint (T-OIDC-1); GET/POST/rotate-secret on the same `IOpenIddictApplicationManager` are unaffected | An admin cannot remove a registered relying party via the API | `RelyingPartyEndpoints.cs`, `Directory.Packages.props` (OpenIddict version pin) |
 | — | **Low** — No global `JsonStringEnumConverter`: minimal-API JSON request bodies with an enum property (e.g. `POST /api/admin/admin-users`'s `role`) only accept the numeric value, not the string name, even though responses often serialize enums as strings (`.ToString()` calls in handlers). Found live while creating a test MinistryManager for T-AUTH-1 verification. Fixing it globally risks changing every module's existing JSON shape without a full audit, so deliberately not fixed here — no task ID assigned pending a decision on scope (global vs. per-endpoint) | Admin UIs must send `"role": 3`, not `"role": "MinistryManager"`, until decided | `Program.cs` (no `AddJsonOptions`/`Configure<JsonOptions>` exists yet) |
 
@@ -62,7 +61,15 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
    deliberately targets. **Implemented (T-SEC-9):** `OidcEndpoints` attaches an internal
    `family_generation` claim on every token response that grants `offline_access`;
    `RotateRefreshTokenFamilyHandler` checks it on every `refresh_token` grant and revokes the
-   whole family the moment a stale generation is presented.
+   whole family the moment a stale generation is presented. **Extended to the browser flow
+   (T-OIDC-2):** `AuthorizeEndpoints.IssueAuthorizationCode` now attaches the same claims, so
+   `/connect/authorize`-issued refresh tokens get identical treatment to the two custom grants.
+   Confirmed live: a *sequential* replay of the exact same already-rotated refresh token never
+   reaches `RotateRefreshTokenFamilyHandler` at all — OpenIddict's own token store rejects it
+   first (`ID2012`, "already been redeemed"), before our code runs. The family-generation check
+   exists for the case that short-circuit doesn't cover: a genuine race where two requests both
+   pass OpenIddict's redemption check for the same predecessor token before either commits (the
+   RFC 9700 threat model), which sequential single-request testing can't reproduce.
 6. **Push notifications** — brief lists email/SMS/push; push deferred until a mobile app exists.
 
 ## 4. Documentation notes

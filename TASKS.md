@@ -92,7 +92,7 @@ row in known-issues §1 by the same ID.
       AC: an external RP completes code+PKCE end-to-end against the seeded `sheba-portal` client;
       `civil_data` is granted only after recorded consent at LoA ≥ 2; `/connect/*` responses stay
       OIDC-spec-shaped (JSend-exempt).
-- [ ] **T-OIDC-2** Family-reuse tracking for authorize-flow refresh tokens *(Low · S · deps:
+- [x] **T-OIDC-2** Family-reuse tracking for authorize-flow refresh tokens *(Low · S · deps:
       T-OIDC-1 ✓, T-SEC-9 ✓ · issue: T-OIDC-2)*: attach `family_id`/`family_generation` claims in
       `AuthorizeEndpoints.IssueAuthorizationCode` the same way the two custom grants already do, so
       a stolen refresh token from the browser PKCE flow also gets cascade-revoked on reuse.

@@ -7,6 +7,46 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Refresh-token family tracking for the browser PKCE flow (T-OIDC-2)**:
+  `AuthorizeEndpoints.IssueAuthorizationCode` now calls the same `AttachRefreshFamilyClaimsAsync`
+  helper the two custom grants (`IssueCitizenTokenAsync`/`IssueAdminTokenAsync`) already used, so
+  a refresh token minted via `/connect/authorize` + PKCE gets `family_id`/`family_generation`
+  claims and participates in T-SEC-9's cascade-revocation-on-reuse the same way. Also made
+  `OidcEndpoints.SetDestinationsForAll` skip those two claim types by name (rather than relying on
+  call ordering) — needed because `IssueFromAuthorizationCodeAsync` re-runs it over a principal
+  OpenIddict restores from the stored code, and an ordering-only rule would have silently leaked
+  the internal claims into the JWT at redemption time.
+
+  **Verified live** end-to-end (admin login → session cookie → PKCE authorize → code exchange with
+  a *different* client than the one that issued the original bearer token → refresh rotation ×2),
+  confirming the family row is created and its generation advances correctly. This surfaced and
+  fixed two pre-existing bugs along the way, both unrelated to T-OIDC-2's stated scope but found
+  while exercising the same code path:
+  - `POST /api/identity/session/establish` copied the caller's bearer-token claims verbatim into
+    the session cookie, including OpenIddict's own internal claims (`oi_prst`, `oi_au_id`,
+    `oi_tkn_id`, `client_id`, `scope`, `aud`/`exp`/`iat`/`iss`/`jti`/`nbf`). The stale `oi_prst`
+    (presenters) claim survived into every new authorization code issued from that cookie, so
+    OpenIddict rejected the token exchange with "issued to a different client application"
+    whenever the RP calling `/connect/authorize` differed from whatever client originally issued
+    the bearer token — i.e. for every third-party RP, since the citizen's own login session and a
+    third party's `client_id` are never the same client. This was a live bug in the core SSO path
+    since T-OIDC-1, just never exercised by a request where the two clients differed. Fixed by
+    filtering the claim copy to identity claims only.
+  - `RotateRefreshTokenFamilyHandler`'s reuse-detection revocation reason (57 chars) exceeded the
+    `revocation_reason` column's `varchar(50)`, so a real replay attempt threw a
+    `DbUpdateException` (500) instead of revoking the family — the exact code path meant to defend
+    against token theft failed in the direction that leaves the family *not* revoked. Fixed by
+    shortening the message and adding defensive truncation in `RefreshTokenFamily.Revoke()`.
+
+  Also confirmed live and documented in known-issues.md: a *sequential* replay of an
+  already-rotated refresh token never reaches `RotateRefreshTokenFamilyHandler` at all — OpenIddict's
+  own token store rejects it first (`ID2012`). The family-generation cascade exists for the race
+  condition that short-circuit doesn't cover, which sequential single-request testing can't
+  reproduce; this is expected, not a gap.
+
+  1 new domain test (`RefreshTokenFamily.Revoke` truncation). Full suite: `dotnet build` clean,
+  `dotnet test` 147/147 passing.
+
 - **Ministry-Admin per-ministry scoping (T-AUTH-1)**: `AdminUser.MinistryId` (required for
   `MinistryManager`, forbidden for every other role — enforced in `AdminUser.Create`) is embedded
   as a `ministry_id` claim on admin tokens and enforced two ways: `MinistryOwnershipFilter`
