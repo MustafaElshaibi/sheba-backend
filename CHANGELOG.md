@@ -7,6 +7,28 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Refresh-token family reuse detection (T-SEC-9)**: `RefreshTokenFamily` is wired into the
+  actual token-issuance path for the first time. `OidcEndpoints` attaches an internal
+  `family_id`/`family_generation` claim pair (no token destination — never appears in the JWT
+  text) whenever a token response grants `offline_access`; because OpenIddict restores the full
+  original principal on every future `refresh_token` grant regardless of claim destinations, these
+  two claims survive across redemptions even though this endpoint never sees the raw refresh
+  token value OpenIddict mints after it returns. `RotateRefreshTokenFamilyHandler` compares the
+  presented generation against the family's current one on every refresh: a match advances it
+  (normal use); a mismatch means a superseded token was replayed, and the **whole family** is
+  revoked — including the legitimate holder's current, individually-still-valid token — matching
+  the RFC 9700 guidance §6.4 already described as the target design. A family with no matching
+  record (pre-feature tokens, or any response that never granted `offline_access`) defers entirely
+  to OpenIddict's own validation rather than blocking anything new.
+
+  Schema: `RefreshTokenFamily.CurrentTokenHash` (never populated — dead since the entity's
+  original commit) replaced with `Generation` (int); `AccountId` renamed to `SubjectId` since the
+  entity now tracks both citizen and admin sessions. Migration `RefreshTokenFamilyGeneration`
+  renames the column (no data loss) and drops the unused hash column. 11 new unit tests cover the
+  domain state machine and both new handlers, including the "reuse revokes the family, and the
+  family stays dead even for the legitimate next attempt" scenario the AC calls out; this is
+  handler-level test coverage (repository mocked), not a live HTTP+Postgres integration test —
+  that tier of test infrastructure doesn't exist in this repo yet (T-TST-4).
 - **Signing/encryption certificate rotation-by-overlap (T-SEC-4)**: `SigningCertificateLoader`
   (`Identity.Infrastructure/Security/`) reads an ordered certificate list from
   `Identity:SigningCertificates` / `Identity:EncryptionCertificates` config — each entry either a

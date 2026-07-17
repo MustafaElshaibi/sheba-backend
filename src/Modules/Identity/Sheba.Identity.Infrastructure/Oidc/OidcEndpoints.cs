@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using Sheba.Identity.Application.Commands.CreateRefreshTokenFamily;
 using Sheba.Identity.Application.Commands.LoginAdmin;
+using Sheba.Identity.Application.Commands.RotateRefreshTokenFamily;
 using Sheba.Identity.Application.Commands.VerifyLoginOtp;
 using Sheba.Shared.Kernel.RateLimiting;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -66,7 +68,7 @@ public static class OidcEndpoints
             return await IssueAdminTokenAsync(request, mediator);
 
         if (request.IsRefreshTokenGrantType())
-            return await IssueFromRefreshTokenAsync(context);
+            return await IssueFromRefreshTokenAsync(context, mediator);
 
         return TokenError(Errors.UnsupportedGrantType, "The specified grant type is not supported.");
     }
@@ -125,6 +127,7 @@ public static class OidcEndpoints
             : new[] { Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess, "civil_data" };
         principal.SetScopes(scopes);
         SetDestinationsForAll(principal);
+        await AttachRefreshFamilyClaimsAsync(identity, principal, result.Value.AccountId, request.ClientId, mediator);
 
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -163,12 +166,15 @@ public static class OidcEndpoints
             : new[] { Scopes.OpenId, Scopes.Profile, "admin_api" };
         principal.SetScopes(scopes);
         SetDestinationsForAll(principal);
+        await AttachRefreshFamilyClaimsAsync(identity, principal, result.Value.AdminId, request.ClientId, mediator);
 
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    // refresh_token — reuse the principal OpenIddict already validated; rotation is on by config
-    private static async Task<IResult> IssueFromRefreshTokenAsync(HttpContext context)
+    // refresh_token — reuse the principal OpenIddict already validated; rotation is on by config.
+    // Family reuse detection (T-SEC-9): a superseded refresh token being replayed doesn't just
+    // fail this one request, it revokes the whole family (RFC 9700) — see RotateRefreshTokenFamilyHandler.
+    private static async Task<IResult> IssueFromRefreshTokenAsync(HttpContext context, IMediator mediator)
     {
         var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
@@ -176,8 +182,41 @@ public static class OidcEndpoints
             return TokenError(Errors.InvalidGrant, "The refresh token is no longer valid.");
 
         var principal = result.Principal;
+
+        var familyIdRaw = principal.GetClaim("family_id");
+        var generationRaw = principal.GetClaim("family_generation");
+        if (Guid.TryParse(familyIdRaw, out var familyId) && int.TryParse(generationRaw, out var presentedGeneration))
+        {
+            var rotation = await mediator.Send(new RotateRefreshTokenFamilyCommand(familyId, presentedGeneration));
+            if (rotation.IsFailure)
+                return TokenError(Errors.InvalidGrant, rotation.Error!.Message);
+
+            var identity = (ClaimsIdentity)principal.Identity!;
+            identity.SetClaim("family_generation", rotation.Value.ToString());
+        }
+
         SetDestinationsForAll(principal);
         return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    // Attaches internal-only family_id/family_generation claims (no destination — see
+    // SetDestinationsForAll's placement before this call — so they never leak into the JWT text)
+    // when the response actually grants offline_access. OpenIddict restores the FULL principal
+    // (every claim, regardless of destination) on every future refresh, which is how these two
+    // claims survive across redemptions despite this endpoint never seeing the raw refresh token
+    // value OpenIddict mints after it returns.
+    private static async Task AttachRefreshFamilyClaimsAsync(
+        ClaimsIdentity identity, ClaimsPrincipal principal, Guid subjectId, string? clientId, IMediator mediator)
+    {
+        if (!principal.HasScope(Scopes.OfflineAccess) || string.IsNullOrEmpty(clientId))
+            return;
+
+        var result = await mediator.Send(new CreateRefreshTokenFamilyCommand(subjectId, clientId));
+        if (result.IsFailure)
+            return; // best-effort bookkeeping — never block token issuance over it
+
+        identity.SetClaim("family_id", result.Value.FamilyId.ToString());
+        identity.SetClaim("family_generation", result.Value.Generation.ToString());
     }
 
     // ── /connect/userinfo ────────────────────────────────────────────────────

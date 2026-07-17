@@ -31,6 +31,10 @@ public interface IIdentityRepository
     Task AddAdminRecoveryCodesAsync(IEnumerable<AdminRecoveryCode> codes, CancellationToken ct = default);
     Task<List<AdminRecoveryCode>> GetUnusedAdminRecoveryCodesAsync(Guid adminUserId, CancellationToken ct = default);
 
+    // ── RefreshTokenFamily ───────────────────────────────────────────────────
+    Task AddRefreshTokenFamilyAsync(RefreshTokenFamily family, CancellationToken ct = default);
+    Task<RefreshTokenFamily?> FindRefreshTokenFamilyByFamilyIdAsync(Guid familyId, CancellationToken ct = default);
+
     // ── Unit of Work ─────────────────────────────────────────────────────────
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

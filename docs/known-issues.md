@@ -28,7 +28,6 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
 | T-SRV-4 | **Medium** — Step-engine gaps: `on_failure_step` is persisted but never consulted (§11.3 compensation unimplemented); unhandled step types fall through to an auto-complete handler and silently succeed; step executions are pre-created for every step at submit *and* created on demand in `ExecuteNextStep` (ambiguous "active step" resolution) | Misconfigured workflows complete without doing work; failure routing absent | `ExecuteNextStepHandler`, step handlers |
 | T-NOT-2 | **Medium** — Notification module owns no event consumers: identity emails are sent by handlers inside Identity.Application (§5.8 assigns them to Notification); no `ServiceRequestSubmitted`/`Completed` notifications exist at all; `NotificationRecord` is never written; `IEmailService`/`ISmsService` are duplicated in Notification.Domain | Citizens get no service-request notifications; no delivery log | `Modules/Notification`, `Identity.Application/EventHandlers` |
 | T-SEC-8 | **Medium** — OTP codes are generated inside `IOtpProvider.SendAsync` (which returns the raw code to the caller), contradicting §6.6's rule that generation/policy live in the application layer and providers only deliver | A provider swap can weaken OTP policy | `IOtpProvider.cs` + OTP adapters |
-| T-SEC-9 | **Medium** — `RefreshTokenFamily` is a dead entity: no reuse-detection or family-revocation code exists (§6.4 claims both); rotation relies on OpenIddict defaults only. Overlaps open decision §3.5 | Stolen-refresh-token family revocation absent | `RefreshTokenFamily.cs`, `OidcEndpoints.cs` |
 | T-WAL-1 | **Medium** — VC signing key is ephemeral when `Wallet:IssuerPrivateKeyPem` is unset: a fresh RSA key is generated per process, so previously issued credentials become unverifiable after a restart; no production fail-fast | Issued VCs silently invalidated | `RsaCredentialSigner.cs` |
 | T-MIN-1 | **Low** — No ministry seed data: the demo catalog references five hardcoded ministry GUIDs that exist in no table; `MinistryEndpoint.RateLimitPerMinute` is stored but never enforced on outbound calls | Seeded ministry-call workflows cannot resolve a ministry; per-endpoint limits inert | `ServiceRequestModule.SeedServiceCatalogAsync`, `MinistryCallStepHandler` |
 
@@ -59,10 +58,10 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
    cascade-revoke every token an attacker may have already minted further down the same chain
    before the legitimate reuse was detected. `RefreshTokenFamily` gives that cascade (§6.4's
    "revoke the entire family on replay" claim), which is the RFC 9700 guidance the design
-   deliberately targets. The gap is that nothing wires the entity into the actual refresh-token
-   issuance path yet — `OidcEndpoints.IssueFromRefreshTokenAsync` just re-signs whatever principal
-   OpenIddict already validated, never touching `RefreshTokenFamily`. Implementation is
-   **T-SEC-9** (§1).
+   deliberately targets. **Implemented (T-SEC-9):** `OidcEndpoints` attaches an internal
+   `family_generation` claim on every token response that grants `offline_access`;
+   `RotateRefreshTokenFamilyHandler` checks it on every `refresh_token` grant and revokes the
+   whole family the moment a stale generation is presented.
 6. **Push notifications** — brief lists email/SMS/push; push deferred until a mobile app exists.
 
 ## 4. Documentation notes

@@ -128,6 +128,14 @@ public sealed class IdentityRepository(IdentityDbContext db) : IIdentityReposito
                        .ToListAsync(ct);
     }
 
+    // ── RefreshTokenFamily ───────────────────────────────────────────────────
+    public async Task AddRefreshTokenFamilyAsync(RefreshTokenFamily family, CancellationToken ct = default)
+        => await db.RefreshTokenFamilies.AddAsync(family, ct);
+
+    public async Task<RefreshTokenFamily?> FindRefreshTokenFamilyByFamilyIdAsync(
+        Guid familyId, CancellationToken ct = default)
+        => await db.RefreshTokenFamilies.FirstOrDefaultAsync(r => r.FamilyId == familyId, ct);
+
     // ── Unit of Work ─────────────────────────────────────────────────────────
     public async Task<int> SaveChangesAsync(CancellationToken ct = default)
         => await db.SaveChangesAsync(ct);

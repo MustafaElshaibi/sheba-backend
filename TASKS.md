@@ -105,7 +105,7 @@ row in known-issues §1 by the same ID.
       returns a raw code.
       AC: no provider generates or returns codes; policy (TTL/attempts/invalidations) unchanged
       and still covered by the existing OTP tests.
-- [ ] **T-SEC-9** Refresh-token family reuse detection *(Medium · M · deps: T-SEC-4 decision ·
+- [x] **T-SEC-9** Refresh-token family reuse detection *(Medium · M · deps: T-SEC-4 decision ·
       issue: T-SEC-9)*: settle known-issues §3.5 (custom `RefreshTokenFamily` vs
       OpenIddict-native tracking), then either implement family tracking + reuse-revocation or
       delete the dead entity and update §6.4 to describe the OpenIddict mechanism actually used.

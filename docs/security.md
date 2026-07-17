@@ -42,8 +42,11 @@ re-encrypt → retire old key.
 - Access JWT 15 min, RS256. External RPs validate via JWKS; introspection available for opaque
   needs.
 - Refresh tokens: 30 days, **rotate on every use**; `RefreshTokenFamily` reuse-detection revokes
-  the entire family on replay (OAuth Security BCP / RFC 9700 guidance for public clients).
-- Revocation: `/connect/revoke`, `/connect/logout`; account suspension force-revokes all families.
+  the entire family on replay (OAuth Security BCP / RFC 9700 guidance for public clients;
+  **T-SEC-9** closed — tracked by a `family_generation` claim, not a raw-token hash, since
+  OpenIddict mints the actual token after the issuing endpoint returns).
+- Revocation: `/connect/revoke`, `/connect/logout`; account suspension force-revoking all families
+  is designed but not yet wired (T-ID-1).
 - **Signing-key rotation by overlap** (T-SEC-4): register new cert alongside old → JWKS publishes
   both → new tokens signed with new key → old cert removed after max token lifetime + skew. RPs
   that cache JWKS honor `kid`. Emergency rotation = same procedure compressed; expect a wave of

@@ -66,12 +66,12 @@ internal sealed class RefreshTokenFamilyConfiguration : IEntityTypeConfiguration
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(r => r.AccountId)
-            .HasColumnName("account_id")
+        builder.Property(r => r.SubjectId)
+            .HasColumnName("subject_id")
             .IsRequired();
 
-        builder.HasIndex(r => r.AccountId)
-            .HasDatabaseName("ix_refresh_token_families_account_id");
+        builder.HasIndex(r => r.SubjectId)
+            .HasDatabaseName("ix_refresh_token_families_subject_id");
 
         builder.Property(r => r.ClientId)
             .HasColumnName("client_id")
@@ -86,9 +86,10 @@ internal sealed class RefreshTokenFamilyConfiguration : IEntityTypeConfiguration
             .IsUnique()
             .HasDatabaseName("ix_refresh_token_families_family_id");
 
-        builder.Property(r => r.CurrentTokenHash)
-            .HasColumnName("current_token_hash")
-            .IsRequired();
+        builder.Property(r => r.Generation)
+            .HasColumnName("generation")
+            .IsRequired()
+            .HasDefaultValue(0);
 
         builder.Property(r => r.IssuedAt)
             .HasColumnName("issued_at");

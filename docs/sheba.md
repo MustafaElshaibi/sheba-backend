@@ -523,7 +523,11 @@ invalidated on re-issue, issuance rate-limited per account and per IP (§13.2).
 - **Refresh tokens**: rotation on every use (OpenIddict default). `RefreshTokenFamily` tracks the
   family: presenting a **superseded** token is treated as theft and revokes the entire family —
   the rotation + reuse-detection scheme recommended by the OAuth Security BCP (RFC 9700) for
-  public clients.
+  public clients (**T-SEC-9** closed). Mechanism: OpenIddict mints the actual refresh token after
+  the endpoint returns, so currency is tracked by a monotonic `family_generation` claim (internal
+  — no token destination, never appears in the JWT) rather than by hashing a raw token value this
+  code never sees; a presented generation that doesn't match the family's current one revokes the
+  whole family, not just that one request.
 - **Logout / revocation**: `/connect/revoke` + `/connect/logout`; admin can force-revoke all
   families for an account (suspension path).
 
@@ -1199,7 +1203,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2, CORS + correlation IDs T-GW-1); auth coverage gaps remain (T-AUTH-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |
 | R26 | Docker compose single server, segmented services, scaling story | §14 | — | Implemented |
-| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; T-SEC-1/2/4 closed; gaps T-SEC-3, T-SEC-5..9 remain (refresh-family revocation unimplemented — T-SEC-9) |
+| R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; T-SEC-1/2/4/9 closed (refresh-family revocation now implemented); gaps T-SEC-3, T-SEC-5..8 remain |
 | R28 | eKYC + admin approval as core capability | §6.2 | Identity | Implemented |
 | R29 | SSO for government services | §6.7 | Identity | Implemented |
 | R30 | Document management | §5.5 | Document | Implemented |
