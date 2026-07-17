@@ -187,12 +187,6 @@ public static class IdentityModule
                 server.SetIdentityTokenLifetime(TimeSpan.FromMinutes(15));
                 server.SetDeviceCodeLifetime(TimeSpan.FromMinutes(5));
 
-                // Emit the access token as a plain signed JWT (not encrypted JWE) so it can
-                // be inspected in jwt.io during the demo. The token is still RS256-signed and
-                // validated server-side. Refresh tokens remain rotated on each use (OpenIddict
-                // default), and reuse of a consumed refresh token is rejected.
-                server.DisableAccessTokenEncryption();
-
                 // Signing/encryption certificates — rotation-by-overlap (T-SEC-4). Each config
                 // list is precedence-ordered (first entry signs new tokens; every listed
                 // certificate still validates tokens it previously signed), loaded via
@@ -215,6 +209,18 @@ public static class IdentityModule
                         server.AddEncryptionCertificate(certificate);
                 else
                     server.AddDevelopmentEncryptionCertificate();
+
+                // Access-token hardening for external RPs (T-SEC-5): with a real encryption
+                // certificate configured, access tokens are encrypted JWE — an external RP holds
+                // an opaque blob it cannot read the claims of (national_id_hash, loa, etc.),
+                // though Sheba.Api's own resource-server validation below decrypts them locally
+                // since it shares the same certificate. Unconfigured (every environment today)
+                // keeps the plain signed JWT so it can still be inspected in jwt.io during
+                // development; the token is still RS256-signed and validated server-side either
+                // way, and refresh-token rotation/reuse-detection (T-SEC-9) is unaffected by this
+                // toggle.
+                if (encryptionCertificates.Count == 0)
+                    server.DisableAccessTokenEncryption();
 
                 // ASP.NET Core host integration
                 server.UseAspNetCore()

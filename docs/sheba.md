@@ -417,7 +417,7 @@ No schema, no entities. Cross-cutting middleware set (§3.5) + the extraction se
 | Endpoints | `/connect/authorize`, `/connect/token`, `/connect/userinfo`, `/connect/introspect`, `/connect/revoke`, `/connect/logout`, `/.well-known/openid-configuration`, `/.well-known/jwks` |
 | Grants | `authorization_code` + **PKCE required** (OAuth 2.1 removes implicit and mandates PKCE for public clients), `client_credentials` (machine/ministry), `refresh_token` (rotating), custom `urn:sheba:grant:national_id_otp` |
 | Scopes | `openid profile email phone offline_access` + `civil_data` (registry claims, consent-gated), `ministry_api`, `admin_api` |
-| Access token | JWT, RS256, **15 min** TTL (unencrypted in dev for inspectability; encrypted or reference tokens for external RPs in prod — T-SEC-5) |
+| Access token | JWT, RS256, **15 min** TTL. Encrypted (JWE) whenever `Identity:EncryptionCertificates` is configured — an external RP then holds an opaque blob, not a token it can read the claims of; Sheba.Api's own resource-server validation still decrypts it locally. Unencrypted when unconfigured, for `jwt.io` inspectability in dev (**T-SEC-5** closed). |
 | Refresh token | 30 days, rotation on every use, family reuse-detection (§6.4) |
 | ID token claims | `sub`, `name`, `preferred_username`, `email`, `national_id_hash` (SHA-256 — the raw NID never leaves the Identity module in a token), `loa` |
 | Signing keys | Dev cert when unconfigured; config-driven multi-cert loading + overlap rotation runbook implemented (§13.4, §4.1, T-SEC-4 closed) — production still needs real certs provisioned into the store/mount |

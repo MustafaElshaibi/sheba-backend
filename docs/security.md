@@ -40,8 +40,13 @@ re-encrypt → retire old key.
 
 ## 4. Token & key lifecycle
 
-- Access JWT 15 min, RS256. External RPs validate via JWKS; introspection available for opaque
-  needs.
+- Access JWT 15 min, RS256, signature verifiable via JWKS — unencrypted by default (dev
+  inspectability), encrypted (JWE, RSA-OAEP/A256CBC-HS512) whenever `Identity:EncryptionCertificates`
+  is configured (**T-SEC-5** closed). Encrypted or not, this is the normal OAuth shape either way:
+  an RP forwards the access token as an opaque Bearer credential to Sheba.Api (the resource
+  server, which always decrypts locally with its own certificate) rather than reading its claims
+  itself — ID tokens remain signed-only JWTs meant for client consumption; `/connect/introspect`
+  covers any RP that genuinely needs to check a token's validity/claims itself.
 - Refresh tokens: 30 days, **rotate on every use**; `RefreshTokenFamily` reuse-detection revokes
   the entire family on replay (OAuth Security BCP / RFC 9700 guidance for public clients;
   **T-SEC-9** closed — tracked by a `family_generation` claim, not a raw-token hash, since

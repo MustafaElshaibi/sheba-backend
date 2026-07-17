@@ -71,7 +71,7 @@ row in known-issues §1 by the same ID.
       `RefreshTokenFamily` vs OpenIddict-native tracking (known-issues §3.5).
 - [ ] **T-AUTH-1** Ministry-Admin scoping: `ministry_id` claim + ownership policy applied to every
       `/api/ministry` and admin ServiceRequest endpoint; contract tests per the permission matrix.
-- [ ] **T-SEC-5** Access-token hardening for external RPs in production: enable OpenIddict
+- [x] **T-SEC-5** Access-token hardening for external RPs in production: enable OpenIddict
       access-token encryption (or reference tokens + introspection); keep unencrypted JWTs in
       dev for inspectability.
 - [ ] Password reset flow (OTP-gated) + account recovery rules in

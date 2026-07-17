@@ -7,6 +7,17 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Access-token encryption for external RPs (T-SEC-5)**: access tokens are now encrypted (JWE,
+  RSA-OAEP/A256CBC-HS512) whenever a real `Identity:EncryptionCertificates` cert is configured —
+  reusing T-SEC-4's `SigningCertificateLoader` result to decide, rather than an environment-name
+  check, so the same config that turns on real certs also hardens the tokens they sign. Unconfigured
+  (every environment today) keeps the existing plain signed JWT for `jwt.io` inspectability — no
+  behavior change in dev. Verified live with a throwaway RSA cert: token shape switches from
+  3-segment JWT to 5-segment JWE (`alg: RSA-OAEP`, `enc: A256CBC-HS512`) when configured, and a
+  protected endpoint (`GET /api/admin/identity-requests`) still authorizes correctly against the
+  encrypted token — Sheba.Api's own resource-server validation decrypts it locally without any
+  separate introspection step needed. ID tokens are untouched (still plain signed JWTs, as OIDC
+  expects for client consumption).
 - **RP secret rotation + bilingual consent screen copy**: `POST
   /api/admin/relying-parties/{clientId}/rotate-secret` (SuperAdmin-only) generates a new
   cryptographically random secret for a confidential client via
