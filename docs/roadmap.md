@@ -54,6 +54,9 @@ authorization-guarded; audit trail active with PII redaction; module boundaries 
 - ~~**T-AUTH-1** Ministry-Admin scoping claim + ownership policies end-to-end.~~ Done for
   `/api/ministry` + ServiceRequest admin routes; Admin/KPI ministry-slice filtering split out as
   T-AUTH-3 (was never in T-AUTH-1's literal TASKS.md scope).
+- ~~**T-AUTH-3** Admin/KPI ministry-slice filtering.~~ Done — `GetKpiSummary`,
+  `GetServiceRequestTrends`, and the service-request-based report generators take the caller's
+  `ministry_id` claim; registration-based figures (not ministry-owned) stay global.
 
 **Exit:** STRIDE rows in [sheba.md §13.5](sheba.md#135-stride-summary-auth-flows) all mitigated in
 code, verified by contract tests.

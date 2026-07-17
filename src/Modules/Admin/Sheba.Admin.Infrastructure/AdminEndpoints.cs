@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -6,6 +7,7 @@ using Sheba.Admin.Application.Analytics.GetKpiSummary;
 using Sheba.Admin.Application.Analytics.GetRegistrationTrends;
 using Sheba.Admin.Application.Analytics.GetServiceRequestTrends;
 using Sheba.Admin.Infrastructure.Reports;
+using Sheba.Shared.Kernel.Security;
 
 namespace Sheba.Admin.Infrastructure;
 
@@ -23,9 +25,9 @@ internal static class AdminEndpoints
             .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── Analytics KPIs ─────────────────────────────────────────────────────
-        group.MapGet("/analytics/kpis", async (IMediator mediator, CancellationToken ct) =>
+        group.MapGet("/analytics/kpis", async (ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetKpiSummaryQuery(), ct);
+            var result = await mediator.Send(new GetKpiSummaryQuery(user.GetMinistryId()), ct);
             return Results.Ok(result);
         })
         .WithName("GetKpiSummary")
@@ -49,10 +51,11 @@ internal static class AdminEndpoints
         // ── Service Request Trends ─────────────────────────────────────────────
         group.MapGet("/analytics/trends/service-requests", async (
             int? days,
+            ClaimsPrincipal user,
             IMediator mediator,
             CancellationToken ct) =>
         {
-            var query = new GetServiceRequestTrendsQuery(days ?? 30);
+            var query = new GetServiceRequestTrendsQuery(days ?? 30, user.GetMinistryId());
             var result = await mediator.Send(query, ct);
             return Results.Ok(result);
         })
@@ -65,6 +68,7 @@ internal static class AdminEndpoints
             DateOnly from,
             DateOnly to,
             string? format,
+            ClaimsPrincipal user,
             PdfReportGenerator pdfGen,
             ExcelReportGenerator excelGen,
             CancellationToken ct) =>
@@ -72,7 +76,7 @@ internal static class AdminEndpoints
             // Default to PDF; support "excel" as an alternative
             if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
-                var (bytes, _) = await excelGen.GenerateServiceRequestReportAsync(from, to, ct);
+                var (bytes, _) = await excelGen.GenerateServiceRequestReportAsync(from, to, user.GetMinistryId(), ct);
                 var fileName = $"identity-requests-{from:yyyyMMdd}-{to:yyyyMMdd}.xlsx";
                 return Results.File(bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -93,10 +97,11 @@ internal static class AdminEndpoints
         group.MapGet("/reports/service-requests", async (
             DateOnly from,
             DateOnly to,
+            ClaimsPrincipal user,
             ExcelReportGenerator excelGen,
             CancellationToken ct) =>
         {
-            var (bytes, _) = await excelGen.GenerateServiceRequestReportAsync(from, to, ct);
+            var (bytes, _) = await excelGen.GenerateServiceRequestReportAsync(from, to, user.GetMinistryId(), ct);
             var fileName = $"service-requests-{from:yyyyMMdd}-{to:yyyyMMdd}.xlsx";
             return Results.File(bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -111,6 +116,7 @@ internal static class AdminEndpoints
             DateOnly from,
             DateOnly to,
             string? type,
+            ClaimsPrincipal user,
             CsvReportGenerator csvGen,
             CancellationToken ct) =>
         {
@@ -119,7 +125,7 @@ internal static class AdminEndpoints
 
             if (string.Equals(type, "service-requests", StringComparison.OrdinalIgnoreCase))
             {
-                (bytes, _) = await csvGen.GenerateServiceRequestCsvAsync(from, to, ct);
+                (bytes, _) = await csvGen.GenerateServiceRequestCsvAsync(from, to, user.GetMinistryId(), ct);
                 fileName = $"service-requests-export-{from:yyyyMMdd}-{to:yyyyMMdd}.csv";
             }
             else

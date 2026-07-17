@@ -59,19 +59,21 @@ public sealed class AdminAnalyticsRepository(AdminDbContext db) : IAdminAnalytic
     }
 
     public async Task<List<DailyServiceRequestSnapshot>> GetServiceRequestSnapshotsAsync(
-        DateOnly from, DateOnly to, CancellationToken ct = default)
+        DateOnly from, DateOnly to, Guid? ministryId = null, CancellationToken ct = default)
         => await db.DailyServiceRequestSnapshots
             .Where(s => s.Date >= from && s.Date <= to)
+            .Where(s => ministryId == null || s.MinistryId == ministryId)
             .OrderBy(s => s.Date)
             .ToListAsync(ct);
 
     // ── Aggregated Queries ──────────────────────────────────────────────────
 
-    public async Task<int> GetTodayCompletionsAsync(CancellationToken ct = default)
+    public async Task<int> GetTodayCompletionsAsync(Guid? ministryId = null, CancellationToken ct = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         return await db.DailyServiceRequestSnapshots
             .Where(s => s.Date == today)
+            .Where(s => ministryId == null || s.MinistryId == ministryId)
             .SumAsync(s => s.Completed, ct);
     }
 
@@ -86,11 +88,12 @@ public sealed class AdminAnalyticsRepository(AdminDbContext db) : IAdminAnalytic
         return snapshots.Average(s => s.AvgApprovalHours!.Value);
     }
 
-    public async Task<int> GetSlaBreachCountLast30DaysAsync(CancellationToken ct = default)
+    public async Task<int> GetSlaBreachCountLast30DaysAsync(Guid? ministryId = null, CancellationToken ct = default)
     {
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30));
         return await db.DailyServiceRequestSnapshots
             .Where(s => s.Date >= from)
+            .Where(s => ministryId == null || s.MinistryId == ministryId)
             .SumAsync(s => s.SlaBreach, ct);
     }
 

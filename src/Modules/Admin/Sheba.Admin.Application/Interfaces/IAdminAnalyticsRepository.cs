@@ -16,12 +16,16 @@ public interface IAdminAnalyticsRepository
     // ── Service Request Snapshots ────────────────────────────────────────────
     Task<DailyServiceRequestSnapshot?> GetServiceRequestSnapshotAsync(DateOnly date, Guid serviceId, CancellationToken ct = default);
     Task<DailyServiceRequestSnapshot> GetOrCreateServiceRequestSnapshotAsync(DateOnly date, Guid serviceId, Guid ministryId, CancellationToken ct = default);
-    Task<List<DailyServiceRequestSnapshot>> GetServiceRequestSnapshotsAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+    Task<List<DailyServiceRequestSnapshot>> GetServiceRequestSnapshotsAsync(DateOnly from, DateOnly to, Guid? ministryId = null, CancellationToken ct = default);
 
     // ── Aggregated Queries ──────────────────────────────────────────────────
-    Task<int> GetTodayCompletionsAsync(CancellationToken ct = default);
+    // ministryId narrows service-request-based numbers (DailyServiceRequestSnapshot carries
+    // MinistryId); null means unrestricted (SuperAdmin/Auditor). Registration-based numbers
+    // (avg approval hours, total accounts, pending requests) have no ministry owner — identity
+    // requests aren't scoped to a ministry — so they stay global regardless of this parameter.
+    Task<int> GetTodayCompletionsAsync(Guid? ministryId = null, CancellationToken ct = default);
     Task<decimal> GetAvgApprovalHoursLast30DaysAsync(CancellationToken ct = default);
-    Task<int> GetSlaBreachCountLast30DaysAsync(CancellationToken ct = default);
+    Task<int> GetSlaBreachCountLast30DaysAsync(Guid? ministryId = null, CancellationToken ct = default);
 
     // ── Report Jobs ──────────────────────────────────────────────────────────
     Task<ReportJob> AddReportJobAsync(ReportJob job, CancellationToken ct = default);

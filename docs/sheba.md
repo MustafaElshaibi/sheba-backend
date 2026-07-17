@@ -1014,9 +1014,18 @@ by handler-level checks on the ServiceRequest admin routes (`CreateServiceDefini
 body's ministryId to the caller's own; `UpdateServiceDefinition`/`SetServiceFee` 404 — not 403, to
 avoid leaking which service IDs exist outside the caller's ministry — on a cross-ministry attempt;
 `GetAllRequests`' `ministryId` filter is forced the same way). SuperAdmin's ministry_id-less token
-remains unrestricted throughout. **Still open:** the "View KPIs / generate reports — own ministry
-slice" row above (Admin module KPI/report filtering was never in T-AUTH-1's literal scope per
-TASKS.md, and remains unimplemented — tracked as **T-AUTH-3**). Role-policy coverage itself was the
+remains unrestricted throughout.
+
+**T-AUTH-3 closed** for the "View KPIs / generate reports — own ministry slice" row: `GetKpiSummary`,
+`GetServiceRequestTrends`, the service-requests Excel/CSV report generators, and the excel branch of
+the identity-requests report endpoint all take an optional `ministryId` — `AdminEndpoints` passes
+`user.GetMinistryId()`, so a MinistryManager's token narrows every service-request-based figure to
+their own ministry (`DailyServiceRequestSnapshot` carries `MinistryId`) while a null claim
+(SuperAdmin/Auditor) sees the global aggregate, matching the existing `GetAllRequests` pattern.
+**Deliberately still global:** `TotalAccounts`, `PendingIdentityRequests`,
+`AvgApprovalHoursLast30Days`, registration trends, and the identity-requests PDF/CSV — these are
+built from `DailyRegistrationSnapshot` and `IIdentityStatsProvider`, and identity requests are not
+ministry-owned entities, so there is no slice to apply. Role-policy coverage itself was the
 separate, already-closed **T-AUTH-2**.
 
 ---

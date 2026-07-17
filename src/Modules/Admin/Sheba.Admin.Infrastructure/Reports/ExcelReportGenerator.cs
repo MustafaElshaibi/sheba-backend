@@ -15,13 +15,15 @@ public sealed class ExcelReportGenerator(
 {
     /// <summary>
     /// Generates an Excel report of daily service request snapshots for the given date range.
+    /// <paramref name="ministryId"/> narrows to one ministry (T-AUTH-3); null returns all.
     /// Returns the workbook as a byte array.
     /// </summary>
     public async Task<(byte[] Bytes, int RowCount)> GenerateServiceRequestReportAsync(
-        DateOnly from, DateOnly to, CancellationToken ct = default)
+        DateOnly from, DateOnly to, Guid? ministryId = null, CancellationToken ct = default)
     {
         var snapshots = await db.DailyServiceRequestSnapshots
             .Where(s => s.Date >= from && s.Date <= to)
+            .Where(s => ministryId == null || s.MinistryId == ministryId)
             .OrderBy(s => s.Date)
             .ThenBy(s => s.ServiceId)
             .ToListAsync(ct);

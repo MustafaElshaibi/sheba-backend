@@ -18,7 +18,7 @@ public sealed class GetServiceRequestTrendsHandler(
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var from = today.AddDays(-(request.Days - 1));
 
-        var snapshots = await analyticsRepo.GetServiceRequestSnapshotsAsync(from, today, ct);
+        var snapshots = await analyticsRepo.GetServiceRequestSnapshotsAsync(from, today, request.MinistryId, ct);
 
         // Group by date and aggregate across all services
         var grouped = snapshots

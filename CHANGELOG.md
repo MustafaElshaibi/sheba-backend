@@ -32,6 +32,25 @@ All notable changes to Sheba are documented here. Format:
   globally risks changing every module's existing JSON shape without a full audit); Admin/KPI
   reports have no ministry-slice filtering despite sheba.md §10.2 documenting one (T-AUTH-3, was
   never in T-AUTH-1's literal TASKS.md scope).
+
+- **Admin/KPI ministry-slice filtering (T-AUTH-3)**: `GetKpiSummaryQuery` and
+  `GetServiceRequestTrendsQuery` take an optional `MinistryId`; `AdminEndpoints` passes
+  `user.GetMinistryId()` (the same claim T-AUTH-1 introduced) so a MinistryManager's dashboard
+  numbers narrow to their own ministry while a null claim (SuperAdmin/Auditor) keeps the global
+  view. `IAdminAnalyticsRepository.GetTodayCompletionsAsync`/`GetSlaBreachCountLast30DaysAsync`/
+  `GetServiceRequestSnapshotsAsync` and the Excel/CSV service-request report generators gained the
+  matching `ministryId` filter parameter (`DailyServiceRequestSnapshot` already carried
+  `MinistryId`, so no migration was needed).
+
+  Deliberately left global: `TotalAccounts`, `PendingIdentityRequests`,
+  `AvgApprovalHoursLast30Days`, registration trend charts, and the identity-requests PDF/CSV
+  export — these read `DailyRegistrationSnapshot`/`IIdentityStatsProvider`, and identity requests
+  are not ministry-owned entities, so there is no ministry slice to apply to them.
+
+  First test project for the Admin module (`tests/Sheba.Admin.Tests`, added to `Sheba.sln`): 8
+  new tests — two handler-level (NSubstitute, verifying the claim is forwarded or left null) and
+  one repository-level using EF Core InMemory to exercise the actual filter predicate rather than
+  a mock. Full suite: `dotnet build` clean, `dotnet test` 146/146 passing.
 - **Access-token encryption for external RPs (T-SEC-5)**: access tokens are now encrypted (JWE,
   RSA-OAEP/A256CBC-HS512) whenever a real `Identity:EncryptionCertificates` cert is configured —
   reusing T-SEC-4's `SigningCertificateLoader` result to decide, rather than an environment-name

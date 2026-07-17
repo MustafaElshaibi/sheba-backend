@@ -69,12 +69,14 @@ public sealed class CsvReportGenerator(
 
     /// <summary>
     /// Exports service request analytics as a CSV file for the given date range.
+    /// <paramref name="ministryId"/> narrows to one ministry (T-AUTH-3); null returns all.
     /// </summary>
     public async Task<(byte[] Bytes, int RowCount)> GenerateServiceRequestCsvAsync(
-        DateOnly from, DateOnly to, CancellationToken ct = default)
+        DateOnly from, DateOnly to, Guid? ministryId = null, CancellationToken ct = default)
     {
         var snapshots = await db.DailyServiceRequestSnapshots
             .Where(s => s.Date >= from && s.Date <= to)
+            .Where(s => ministryId == null || s.MinistryId == ministryId)
             .OrderBy(s => s.Date)
             .ThenBy(s => s.ServiceId)
             .ToListAsync(ct);

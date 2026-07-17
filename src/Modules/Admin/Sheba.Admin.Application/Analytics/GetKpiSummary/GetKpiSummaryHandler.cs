@@ -20,9 +20,9 @@ public sealed class GetKpiSummaryHandler(
     {
         var totalAccounts = await identityStats.GetTotalAccountsAsync(ct);
         var pendingRequests = await identityStats.GetPendingIdentityRequestsAsync(ct);
-        var todayCompletions = await analyticsRepo.GetTodayCompletionsAsync(ct);
+        var todayCompletions = await analyticsRepo.GetTodayCompletionsAsync(request.MinistryId, ct);
         var avgApprovalHours = await analyticsRepo.GetAvgApprovalHoursLast30DaysAsync(ct);
-        var slaBreachCount = await analyticsRepo.GetSlaBreachCountLast30DaysAsync(ct);
+        var slaBreachCount = await analyticsRepo.GetSlaBreachCountLast30DaysAsync(request.MinistryId, ct);
 
         logger.LogDebug(
             "[GetKpiSummary] Accounts={Accounts} Pending={Pending} TodayCompletions={Completions}",

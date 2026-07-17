@@ -15,7 +15,6 @@ Severity (2026-07 code audit onward): **Critical** (exploitable/blocking now) ·
 | T-SEC-6/7 | No DB-volume/column encryption for `form_data_json`; MinIO SSE off (T-DOC-2) | PII at rest relies on host security only | Postgres/MinIO deployment |
 | T-PAY-1 | Payment Application layer is **empty** (entities + repo only; mock flow) | No real order/refund lifecycle; workflow coupled via direct command instead of `PaymentCompletedEvent` | `Modules/Payment` |
 | T-AUD-1..3 | Audit is a plain table: no INSERT-only grant, no hash chain, no partitioning | "Tamper-evident" is aspirational today | `Modules/Audit` |
-| T-AUTH-3 | **Low** — Admin/KPI reports have no ministry-slice filtering (sheba.md §10.2's "View KPIs — own ministry slice" row); every admin sees the global aggregate regardless of role. Was never in T-AUTH-1's literal TASKS.md scope (`/api/ministry` + admin ServiceRequest endpoints only) | A MinistryManager sees other ministries' KPI numbers | `Modules/Admin` |
 | T-NOT-1 | `Notification`/`NotificationTemplate` entities are TODO stubs; sends are hardcoded strings | No bilingual templating | `Modules/Notification` |
 | T-ADM-1 | No projection rebuild for the BI read model | Lost/buggy projection = manual SQL repair | `Modules/Admin` |
 | T-TST-1..4 | Only ~2 real test classes (Identity); Ministry/ServiceRequest/Integration projects are placeholders | Regression safety near zero outside Identity | `tests/` |
