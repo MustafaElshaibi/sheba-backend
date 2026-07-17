@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.LoginCitizen;
 
@@ -15,11 +16,10 @@ namespace Sheba.Identity.Application.Commands.LoginCitizen;
 public sealed record LoginCitizenCommand(
     string UsernameOrNid,
     string Password
-) : IRequest<LoginCitizenResponse>;
+) : IRequest<Result<LoginCitizenResponse>>;
 
+/// <summary>Response for a successful LoginCitizenCommand — failures are carried by Result&lt;T&gt;.Error.</summary>
 public sealed record LoginCitizenResponse(
-    bool   OtpSent,
     Guid   AccountId,
-    string MaskedPhone,
-    string? FailureReason = null
+    string MaskedPhone
 );

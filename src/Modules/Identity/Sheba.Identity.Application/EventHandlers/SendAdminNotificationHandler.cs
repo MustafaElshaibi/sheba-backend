@@ -23,6 +23,7 @@ namespace Sheba.Identity.Application.EventHandlers;
 public sealed class SendAdminNotificationHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    IInboxGuard inboxGuard,
     ILogger<SendAdminNotificationHandler> logger
 ) : INotificationHandler<IdentityRequestSubmittedEvent>
 {
@@ -30,9 +31,15 @@ public sealed class SendAdminNotificationHandler(
     // Hardcoded admin email for graduation demonstration purposes.
     private const string AdminEmail   = "admin@sheba.gov";
     private const string AdminName    = "Sheba Identity Reviewer";
+    private const string ConsumerName = nameof(SendAdminNotificationHandler);
 
     public async Task Handle(IdentityRequestSubmittedEvent notification, CancellationToken cancellationToken)
     {
+        // Guarded by IInboxGuard (T-EVT-1): at-least-once outbox redelivery would otherwise
+        // resend this admin notification email.
+        if (await inboxGuard.IsProcessedAsync(notification.EventId, ConsumerName, cancellationToken))
+            return;
+
         var account = await repository.FindAccountByIdAsync(notification.AccountId, cancellationToken);
 
         if (account is null)
@@ -79,9 +86,12 @@ public sealed class SendAdminNotificationHandler(
             cancellationToken: cancellationToken);
 
         if (sent)
+        {
+            await inboxGuard.MarkProcessedAsync(notification.EventId, ConsumerName, cancellationToken);
             logger.LogInformation(
                 "[SendAdminNotification] Admin notification sent for RequestId={RequestId} (AccountId={AccountId})",
                 notification.RequestId, notification.AccountId);
+        }
         else
             logger.LogError(
                 "[SendAdminNotification] Failed to send admin notification for RequestId={RequestId}",

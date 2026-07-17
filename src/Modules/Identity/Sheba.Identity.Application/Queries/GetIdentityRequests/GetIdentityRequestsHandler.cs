@@ -2,15 +2,16 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Queries.GetIdentityRequests;
 
 public sealed class GetIdentityRequestsHandler(
     IIdentityRepository repository,
     ILogger<GetIdentityRequestsHandler> logger
-) : IRequestHandler<GetIdentityRequestsQuery, GetIdentityRequestsResponse>
+) : IRequestHandler<GetIdentityRequestsQuery, Result<GetIdentityRequestsResponse>>
 {
-    public async Task<GetIdentityRequestsResponse> Handle(
+    public async Task<Result<GetIdentityRequestsResponse>> Handle(
         GetIdentityRequestsQuery request,
         CancellationToken cancellationToken)
     {
@@ -52,7 +53,7 @@ public sealed class GetIdentityRequestsHandler(
             "[GetIdentityRequests] Returning {Count}/{Total} requests (Page={Page})",
             items.Count, total, request.Page);
 
-        return new GetIdentityRequestsResponse(items, total, request.Page, request.PageSize, totalPages);
+        return Result.Success(new GetIdentityRequestsResponse(items, total, request.Page, request.PageSize, totalPages));
     }
 
     /// <summary>

@@ -63,7 +63,7 @@ public sealed class VerifyOtpHandlerTests
         var result = await _sut.Handle(command, default);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
+        result.IsSuccess.Should().BeTrue();
         await _repo.Received(1).SaveChangesAsync(default);
     }
 
@@ -83,8 +83,8 @@ public sealed class VerifyOtpHandlerTests
         var result = await _sut.Handle(command, default);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Message.Should().Contain("Invalid code");
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Message.Should().Contain("Invalid code");
     }
 
     [Fact]
@@ -103,8 +103,8 @@ public sealed class VerifyOtpHandlerTests
         var result = await _sut.Handle(command, default);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Message.Should().Contain("expired");
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Message.Should().Contain("expired");
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class VerifyOtpHandlerTests
         var result = await _sut.Handle(command, default);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Message.Should().Contain("No active OTP");
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Message.Should().Contain("No active OTP");
     }
 }

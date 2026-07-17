@@ -8,6 +8,17 @@
 
   <ItemGroup>
     <PackageReference Include="MediatR.Contracts" />
+    <!-- Outbox/inbox primitives (T-EVT-1) and the shared EfUnitOfWork/EfInboxGuard need the
+         core EF Core types (DbContext, SaveChangesInterceptor, IEntityTypeConfiguration). No
+         provider package (Npgsql) — that stays module-specific. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- For the JSend endpoint filter (T-API-1): IEndpointFilter/IResult live in the shared
+         framework. Framework reference only — no package coupling added to module domains. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

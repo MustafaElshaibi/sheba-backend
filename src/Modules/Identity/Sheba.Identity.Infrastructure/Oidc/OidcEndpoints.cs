@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using Sheba.Identity.Application.Commands.LoginAdmin;
 using Sheba.Identity.Application.Commands.VerifyLoginOtp;
+using Sheba.Shared.Kernel.RateLimiting;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Sheba.Identity.Infrastructure.Oidc;
@@ -32,9 +34,17 @@ public static class OidcEndpoints
 {
     public const string ShebaOtpGrantType = "urn:sheba:grant:national_id_otp";
 
+    // Admin authentication is a distinct grant issuing a distinct principal (§10.1: AdminUser is
+    // never the same principal as a citizen Account, even for the SuperAdmin who is also a
+    // citizen). No OTP round-trip yet — mandatory admin TOTP is designed but deferred (T-SEC-1);
+    // this grant is the password-only baseline it will sit in front of.
+    public const string ShebaAdminGrantType = "urn:sheba:grant:admin_password";
+
     public static WebApplication MapOidcEndpoints(this WebApplication app)
     {
-        app.MapPost("/connect/token", HandleTokenAsync).WithTags("OIDC");
+        app.MapPost("/connect/token", HandleTokenAsync)
+            .RequireRateLimiting(RateLimitPolicyNames.ConnectToken) // T-SEC-2
+            .WithTags("OIDC");
         app.MapMethods("/connect/userinfo", new[] { "GET", "POST" }, HandleUserinfoAsync).WithTags("OIDC");
         app.MapMethods("/connect/logout", new[] { "GET", "POST" }, HandleLogoutAsync).WithTags("OIDC");
         return app;
@@ -51,6 +61,9 @@ public static class OidcEndpoints
 
         if (request.GrantType == ShebaOtpGrantType)
             return await IssueCitizenTokenAsync(request, mediator);
+
+        if (request.GrantType == ShebaAdminGrantType)
+            return await IssueAdminTokenAsync(request, mediator);
 
         if (request.IsRefreshTokenGrantType())
             return IssueFromRefreshToken(context);
@@ -86,19 +99,22 @@ public static class OidcEndpoints
             return TokenError(Errors.InvalidRequest, "account_id and otp are required for this grant.");
 
         var result = await mediator.Send(new VerifyLoginOtpCommand(accountId, otp));
-        if (!result.Succeeded)
-            return TokenError(Errors.InvalidGrant, result.Message ?? "Login verification failed.");
+        if (result.IsFailure)
+            return TokenError(Errors.InvalidGrant, result.Error!.Message);
 
         var identity = new ClaimsIdentity(
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
             Claims.Name, Claims.Role);
 
-        identity.SetClaim(Claims.Subject, result.AccountId.ToString());
-        identity.SetClaim(Claims.Name, result.FullNameEn);
-        identity.SetClaim(Claims.PreferredUsername, result.Username);
-        identity.SetClaim(Claims.Email, result.Email);
-        identity.SetClaim("national_id_hash", HashNid(result.NationalId));
-        identity.SetClaim("loa", result.IdentityLevel.ToString());
+        identity.SetClaim(Claims.Subject, result.Value.AccountId.ToString());
+        identity.SetClaim(Claims.Name, result.Value.FullNameEn);
+        identity.SetClaim(Claims.PreferredUsername, result.Value.Username);
+        identity.SetClaim(Claims.Email, result.Value.Email);
+        identity.SetClaim("national_id_hash", HashNid(result.Value.NationalId));
+        identity.SetClaim("loa", result.Value.IdentityLevel.ToString());
+        // Every citizen token carries this fixed role. Authorization policies key off it to keep
+        // citizen-only endpoints closed to admin principals and vice versa (§10.1).
+        identity.SetClaim("role", "Citizen");
 
         var principal = new ClaimsPrincipal(identity);
 
@@ -107,6 +123,43 @@ public static class OidcEndpoints
         var scopes = requested.Length > 0
             ? (IEnumerable<string>)requested
             : new[] { Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess, "civil_data" };
+        principal.SetScopes(scopes);
+        SetDestinationsForAll(principal);
+
+        return Results.SignIn(principal, authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    // urn:sheba:grant:admin_password — admin: employee_id_or_email + password → tokens.
+    // A separate principal type from the citizen grant above (§10.1) — the role claim carries the
+    // AdminUser's specific sub-role (SuperAdmin, IdentityReviewer, ...), which authorization
+    // policies match against.
+    private static async Task<IResult> IssueAdminTokenAsync(OpenIddictRequest request, IMediator mediator)
+    {
+        var identifier = request.GetParameter("employee_id_or_email")?.Value?.ToString();
+        var password = request.GetParameter("password")?.Value?.ToString();
+
+        if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(password))
+            return TokenError(Errors.InvalidRequest, "employee_id_or_email and password are required for this grant.");
+
+        var result = await mediator.Send(new LoginAdminCommand(identifier, password));
+        if (result.IsFailure)
+            return TokenError(Errors.InvalidGrant, result.Error!.Message);
+
+        var identity = new ClaimsIdentity(
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            Claims.Name, Claims.Role);
+
+        identity.SetClaim(Claims.Subject, result.Value.AdminId.ToString());
+        identity.SetClaim(Claims.Name, result.Value.FullName);
+        identity.SetClaim(Claims.Email, result.Value.Email);
+        identity.SetClaim("role", result.Value.Role);
+
+        var principal = new ClaimsPrincipal(identity);
+
+        var requested = request.GetScopes();
+        var scopes = requested.Length > 0
+            ? (IEnumerable<string>)requested
+            : new[] { Scopes.OpenId, Scopes.Profile, "admin_api" };
         principal.SetScopes(scopes);
         SetDestinationsForAll(principal);
 

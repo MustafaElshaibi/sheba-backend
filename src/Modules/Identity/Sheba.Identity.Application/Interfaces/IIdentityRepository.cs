@@ -27,9 +27,6 @@ public interface IIdentityRepository
     Task<AdminUser?> FindAdminByEmailAsync(string email, CancellationToken ct = default);
     Task<AdminUser?> FindAdminByIdAsync(Guid adminId, CancellationToken ct = default);
 
-    // ── Outbox ─────────────────────────────────────────────────────────────────
-    Task AddOutboxMessageAsync(OutboxMessage message, CancellationToken ct = default);
-
     // ── Unit of Work ─────────────────────────────────────────────────────────
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

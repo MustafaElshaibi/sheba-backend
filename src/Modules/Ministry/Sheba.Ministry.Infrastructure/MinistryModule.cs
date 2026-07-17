@@ -17,6 +17,9 @@ using Sheba.Ministry.Infrastructure.Adapters;
 using Sheba.Ministry.Infrastructure.Persistence;
 using Sheba.Ministry.Infrastructure.Persistence.Repositories;
 using Sheba.Ministry.Infrastructure.Security;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Ministry.Infrastructure;
 
@@ -48,6 +51,7 @@ public static class MinistryModule
                     npgsql.MigrationsAssembly(typeof(MinistryModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
 
         // Register as base DbContext for automatic migration discovery
@@ -56,8 +60,15 @@ public static class MinistryModule
         // ── 2. Repository ─────────────────────────────────────────────────────
         services.AddScoped<IMinistryRepository, MinistryRepository>();
 
+        // ── 2a. Unit of work + inbox guard (T-EVT-1) ──────────────────────────
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<MinistryDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<MinistryDbContext>>();
+
         // ── 3. Credential encryption (AES-256-GCM) ────────────────────────────
         services.AddSingleton<ICredentialEncryptor, AesGcmCredentialEncryptor>();
+
+        // ── 3b. Inbound webhook verifier (HMAC + timestamp + Redis dedup) ─────
+        services.AddScoped<IMinistryWebhookVerifier, MinistryWebhookVerifier>();
 
         // ── 4. Auth adapters (registered as IMinistryAuthAdapter collection) ──
         services.AddScoped<OidcMinistryAuthAdapter>();
@@ -77,7 +88,13 @@ public static class MinistryModule
     /// </summary>
     public static WebApplication MapMinistryEndpoints(this WebApplication app)
     {
-        var api = app.MapGroup("/api/ministry").WithTags("Ministry");
+        // Gated to admins who manage ministries (SuperAdmin or MinistryManager). Per-ministry
+        // ownership — a MinistryManager touching only their own ministry_id — is not enforced
+        // yet; that is T-AUTH-1, tracked separately and deliberately out of scope here.
+        var api = app.MapGroup("/api/ministry")
+            .WithTags("Ministry")
+            .RequireAuthorization("MinistryManager")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── GET /api/ministry — list all ministries ──────────────────────────
         api.MapGet("/", async (IMediator mediator, bool? includeInactive, CancellationToken ct) =>

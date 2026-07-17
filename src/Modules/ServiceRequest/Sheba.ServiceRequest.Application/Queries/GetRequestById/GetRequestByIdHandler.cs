@@ -11,6 +11,11 @@ public sealed class GetRequestByIdHandler(IServiceRequestRepository repo)
         var r = await repo.GetByIdAsync(request.RequestId, ct);
         if (r is null) return null;
 
+        // Ownership check: a non-admin caller only ever sees their own requests. Returning null
+        // (not a 403) keeps this from confirming that a request with this id exists at all.
+        if (!request.IsAdmin && r.CitizenId != request.ActorId)
+            return null;
+
         return new RequestDetailDto(
             r.Id, r.ReferenceNumber, r.ServiceId, r.CitizenId,
             r.Status.ToString(), r.CurrentStep, r.Priority,

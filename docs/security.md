@@ -52,9 +52,10 @@ re-encrypt → retire old key.
 - Passwords: 5 failures → exponential account lock (`2^(n-4)` min); counters reset on success.
 - OTP: CSPRNG 6-digit; Argon2id hash at rest; 5-min TTL; 3 verify attempts per code; re-issue
   invalidates prior codes; issuance ≤ 3 per 15 min per account + per-IP cap (Redis counters).
-- ASP.NET Core `RateLimiter` (**T-SEC-2**, currently absent): strict sliding windows on
-  `/api/identity/register|login|verify-otp` and `/connect/token`; per-client policies elsewhere;
-  429 responses in JSend `fail` form.
+- ASP.NET Core `RateLimiter` (**T-SEC-2**, implemented): Redis-backed sliding-window-log limiters
+  on `/api/identity/register|login|verify-otp` and `/connect/token`, partitioned by caller IP; an
+  in-memory global default elsewhere. 429 responses render as JSend `fail` (except `/connect/*`,
+  which stays OAuth-shaped).
 - Registration returns one generic failure for all NID-check outcomes (anti-enumeration oracle).
 
 ## 6. Webhook security (inbound)

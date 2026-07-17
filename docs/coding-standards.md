@@ -33,9 +33,12 @@ Never: Domain → Application, any layer → another module, Application → EF 
   messages are user-facing — write them accordingly; keys mirror input field names (they become
   JSend `fail` data keys).
 - Commands that mutate state implement `ITransactionalCommand`.
-- Expected failures today throw `NotFoundException` / `DomainException` / `ValidationException`
-  (mapped centrally to JSend). Target: `Result<T>` in Shared.Kernel for expected failures
-  (T-STD-1) — adopt module-wide in one pass, never mix styles within a module.
+- Two sanctioned styles for expected failures — pick one per module, never mix within a module:
+  (a) throw `NotFoundException` / `DomainException` / `ValidationException` (mapped centrally to
+  JSend by the exception middleware) — the default for modules not yet converted; or (b) return
+  `Result<T>` from `Sheba.Shared.Kernel.Results` and let the endpoint call
+  `result.ToHttpResult()`, which renders the *same* JSend shape/status as the exception it
+  replaces. Identity uses (b) end-to-end (T-STD-1); every other module still uses (a).
 
 ## 4. API conventions
 

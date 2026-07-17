@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
-using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 
@@ -17,23 +17,25 @@ namespace Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 public sealed class ApproveIdentityRequestHandler(
     IIdentityRepository repository,
     ILogger<ApproveIdentityRequestHandler> logger
-) : IRequestHandler<ApproveIdentityRequestCommand, ApproveIdentityRequestResponse>
+) : IRequestHandler<ApproveIdentityRequestCommand, Result<ApproveIdentityRequestResponse>>
 {
-    public async Task<ApproveIdentityRequestResponse> Handle(
+    public async Task<Result<ApproveIdentityRequestResponse>> Handle(
         ApproveIdentityRequestCommand request,
         CancellationToken cancellationToken)
     {
-        var identityRequest = await repository.FindRequestByIdAsync(request.RequestId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.IdentityRequest), request.RequestId);
+        var identityRequest = await repository.FindRequestByIdAsync(request.RequestId, cancellationToken);
+        if (identityRequest is null)
+            return Result.Failure<ApproveIdentityRequestResponse>(Error.NotFound("resource", "Identity request not found."));
 
         if (identityRequest.Status is not (RequestStatus.Pending or RequestStatus.UnderReview))
         {
-            throw new DomainException(
-                $"Cannot approve request in status {identityRequest.Status}. Only Pending or UnderReview requests can be approved.");
+            return Result.Failure<ApproveIdentityRequestResponse>(Error.Conflict("domain",
+                $"Cannot approve request in status {identityRequest.Status}. Only Pending or UnderReview requests can be approved."));
         }
 
-        var account = await repository.FindAccountByIdAsync(identityRequest.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.Account), identityRequest.AccountId);
+        var account = await repository.FindAccountByIdAsync(identityRequest.AccountId, cancellationToken);
+        if (account is null)
+            return Result.Failure<ApproveIdentityRequestResponse>(Error.NotFound("resource", "Account not found."));
 
         // Domain methods raise domain events
         identityRequest.Approve(request.ReviewedByAdminId, request.Notes);
@@ -60,9 +62,9 @@ public sealed class ApproveIdentityRequestHandler(
             "[ApproveIdentityRequest] RequestId={RequestId} approved by AdminId={AdminId}",
             request.RequestId, request.ReviewedByAdminId);
 
-        return new ApproveIdentityRequestResponse(
+        return Result.Success(new ApproveIdentityRequestResponse(
             RequestId: request.RequestId,
             AccountId: account.Id,
-            Message:   "Identity request approved. Citizen account is now active.");
+            Message:   "Identity request approved. Citizen account is now active."));
     }
 }

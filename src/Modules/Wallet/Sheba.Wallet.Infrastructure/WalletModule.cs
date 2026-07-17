@@ -10,6 +10,9 @@ using Sheba.Wallet.Domain.Interfaces;
 using Sheba.Wallet.Infrastructure.Credentials;
 using Sheba.Wallet.Infrastructure.Persistence;
 using Sheba.Wallet.Infrastructure.Persistence.Repositories;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Wallet.Infrastructure;
 
@@ -27,10 +30,13 @@ public static class WalletModule
                     npgsql.MigrationsAssembly(typeof(WalletModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
 
         services.AddScoped<DbContext>(sp => sp.GetRequiredService<WalletDbContext>());
         services.AddScoped<IWalletRepository, WalletRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<WalletDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<WalletDbContext>>();
 
         // RSA credential signer — singleton so the RSA key is stable for the process lifetime
         services.AddSingleton<ICredentialSigner, RsaCredentialSigner>();
@@ -40,7 +46,8 @@ public static class WalletModule
 
     public static WebApplication MapWalletEndpoints(this WebApplication app)
     {
-        var wallet = app.MapGroup("/api/wallet").WithTags("Wallet");
+        var wallet = app.MapGroup("/api/wallet").WithTags("Wallet")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── GET /api/wallet/credentials — list the citizen's VCs with decoded claims ─────────────
         wallet.MapGet("/credentials", async (

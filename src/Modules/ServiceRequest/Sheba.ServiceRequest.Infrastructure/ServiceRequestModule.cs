@@ -1,10 +1,12 @@
-﻿using MediatR;
+﻿using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sheba.Shared.Kernel.Security;
 using Sheba.ServiceRequest.Application.Commands.CreateServiceCategory;
 using Sheba.ServiceRequest.Application.Commands.CreateServiceDefinition;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
@@ -24,6 +26,9 @@ using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.ServiceRequest.Domain.Interfaces;
 using Sheba.ServiceRequest.Infrastructure.Persistence;
 using Sheba.ServiceRequest.Infrastructure.Persistence.Repositories;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.ServiceRequest.Infrastructure;
 
@@ -42,11 +47,14 @@ public static class ServiceRequestModule
                     npgsql.MigrationsAssembly(typeof(ServiceRequestModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
 
         services.AddScoped<DbContext>(sp => sp.GetRequiredService<ServiceRequestDbContext>());
         services.AddScoped<IServiceDefinitionRepository, ServiceDefinitionRepository>();
         services.AddScoped<IServiceRequestRepository, ServiceRequestRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<ServiceRequestDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<ServiceRequestDbContext>>();
 
         // Workflow step handlers
         services.AddScoped<IWorkflowStepHandler, PaymentStepHandler>();
@@ -61,7 +69,10 @@ public static class ServiceRequestModule
     public static WebApplication MapServiceRequestEndpoints(this WebApplication app)
     {
         // ── Service Catalog (public) ─────────────────────────────────────────
-        var catalog = app.MapGroup("/api/services").WithTags("Service Catalog");
+        // A citizen browses the catalog before they necessarily hold a token, so this stays
+        // anonymous by design — it's read-only, published-services-only data.
+        var catalog = app.MapGroup("/api/services").WithTags("Service Catalog").AllowAnonymous()
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         catalog.MapGet("/", async (IMediator mediator, bool? includeInactive, CancellationToken ct) =>
         {
@@ -80,7 +91,10 @@ public static class ServiceRequestModule
         .WithSummary("Get full service detail with form schema, fees, docs, workflow steps.");
 
         // ── Admin Service Management ─────────────────────────────────────────
-        var admin = app.MapGroup("/api/admin/services").WithTags("Admin — Service Catalog");
+        var admin = app.MapGroup("/api/admin/services")
+            .WithTags("Admin — Service Catalog")
+            .RequireAuthorization("MinistryManager")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         admin.MapPost("/categories", async (
             CreateServiceCategoryCommand command, IMediator mediator, CancellationToken ct) =>
@@ -121,36 +135,49 @@ public static class ServiceRequestModule
         .WithSummary("Add a fee to a service.");
 
         // ── Service Requests (citizen) ───────────────────────────────────────
-        var requests = app.MapGroup("/api/requests").WithTags("Service Requests");
+        // No blanket group-level policy: these routes need different postures (citizen-only vs.
+        // "citizen or admin, with ownership enforced in the handler" vs. admin-only), and a
+        // group-level RequireAuthorization would AND together with any per-route one instead of
+        // choosing between them.
+        var requests = app.MapGroup("/api/requests").WithTags("Service Requests")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         requests.MapPost("/", async (
-            SubmitServiceRequestCommand command, IMediator mediator, CancellationToken ct) =>
+            SubmitServiceRequestBody body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
+            // CitizenId comes from the token — the body used to carry it directly, which let any
+            // authenticated citizen submit a request in someone else's name.
+            var command = new SubmitServiceRequestCommand(
+                body.ServiceId, user.RequireSubjectId(), body.FormDataJson, body.Priority);
             var result = await mediator.Send(command, ct);
             // Auto-execute the first workflow step
             await mediator.Send(new ExecuteNextStepCommand(result.RequestId), ct);
             return Results.Created($"/api/requests/{result.RequestId}", result);
         })
+        .RequireAuthorization("CitizenOnly")
         .WithName("SubmitServiceRequest")
-        .WithSummary("Submit a new service request and start workflow.");
+        .WithSummary("Submit a new service request (as yourself) and start workflow.");
 
-        requests.MapGet("/mine/{citizenId:guid}", async (
-            Guid citizenId, IMediator mediator, CancellationToken ct) =>
+        requests.MapGet("/mine", async (
+            ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetMyRequestsQuery(citizenId), ct);
+            var result = await mediator.Send(new GetMyRequestsQuery(user.RequireSubjectId()), ct);
             return Results.Ok(result);
         })
+        .RequireAuthorization("CitizenOnly")
         .WithName("GetMyRequests")
-        .WithSummary("Get all service requests for a citizen.");
+        .WithSummary("Get all service requests for the calling citizen.");
 
         requests.MapGet("/{id:guid}", async (
-            Guid id, IMediator mediator, CancellationToken ct) =>
+            Guid id, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetRequestByIdQuery(id), ct);
+            var isAdmin = user.GetRole() != "Citizen";
+            var result = await mediator.Send(new GetRequestByIdQuery(id, user.RequireSubjectId(), isAdmin), ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
+        .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
         .WithName("GetRequestById")
-        .WithSummary("Get full request detail with step executions.");
+        .WithSummary("Get full request detail with step executions (own requests only, unless admin).");
 
         requests.MapPost("/{id:guid}/execute-next", async (
             Guid id, IMediator mediator, CancellationToken ct) =>
@@ -158,39 +185,53 @@ public static class ServiceRequestModule
             var result = await mediator.Send(new ExecuteNextStepCommand(id), ct);
             return Results.Ok(result);
         })
+        .RequireAuthorization("AnyAdmin") // manual workflow trigger; automatic advances happen in-process
         .WithName("ExecuteNextStep")
-        .WithSummary("Execute the next workflow step for a request.");
+        .WithSummary("Manually execute the next workflow step for a request (admin/operator action).");
 
         // ── Payment ──────────────────────────────────────────────────────────
         requests.MapPost("/payments/{paymentOrderId:guid}/complete", async (
-            Guid paymentOrderId, IMediator mediator, CancellationToken ct) =>
+            Guid paymentOrderId, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new MarkPaymentCompleteCommand(paymentOrderId), ct);
+            var isAdmin = user.GetRole() != "Citizen";
+            var result = await mediator.Send(
+                new MarkPaymentCompleteCommand(paymentOrderId, user.RequireSubjectId(), isAdmin), ct);
             return Results.Ok(result);
         })
+        .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
         .WithName("MarkPaymentComplete")
-        .WithSummary("Mark a payment as completed (mock gateway callback).");
+        .WithSummary("Mark your own payment as completed (mock gateway callback).");
 
         // ── Webhook Receiver ─────────────────────────────────────────────────
+        // Public by design: ministry systems cannot present a Sheba bearer token, so this
+        // endpoint authenticates each callback by HMAC signature + timestamp + delivery-id dedup
+        // inside the handler (§7.4), NOT by the auth middleware. Hence AllowAnonymous.
         app.MapPost("/api/webhooks/ministry/{ministryId:guid}", async (
             Guid ministryId, HttpRequest httpRequest, IMediator mediator, CancellationToken ct) =>
         {
             using var reader = new StreamReader(httpRequest.Body);
             var payload = await reader.ReadToEndAsync(ct);
-            var eventType = httpRequest.Headers["X-Webhook-Event"].FirstOrDefault() ?? "unknown";
-            var signature = httpRequest.Headers["X-Webhook-Signature"].FirstOrDefault();
+            var eventType  = httpRequest.Headers["X-Sheba-Event"].FirstOrDefault() ?? "unknown";
+            var signature  = httpRequest.Headers["X-Sheba-Signature"].FirstOrDefault();
+            var timestamp  = httpRequest.Headers["X-Sheba-Timestamp"].FirstOrDefault();
+            var deliveryId = httpRequest.Headers["X-Sheba-Delivery-Id"].FirstOrDefault();
 
             var result = await mediator.Send(new HandleWebhookCallbackCommand(
-                ministryId, eventType, payload, signature), ct);
+                ministryId, eventType, payload, signature, timestamp, deliveryId), ct);
 
             return result.Accepted ? Results.Ok(result) : Results.BadRequest(result);
         })
+        .AllowAnonymous()
+        .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>() // JSend envelopes (T-API-1)
         .WithTags("Webhooks")
         .WithName("MinistryWebhookReceiver")
-        .WithSummary("Receive webhook callbacks from ministry systems.");
+        .WithSummary("Receive signed webhook callbacks from ministry systems (HMAC-verified).");
 
         // ── Admin Requests ───────────────────────────────────────────────────
-        var adminReq = app.MapGroup("/api/admin/requests").WithTags("Admin — Service Requests");
+        var adminReq = app.MapGroup("/api/admin/requests")
+            .WithTags("Admin — Service Requests")
+            .RequireAuthorization("MinistryManager")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         adminReq.MapGet("/", async (
             IMediator mediator,
@@ -208,6 +249,9 @@ public static class ServiceRequestModule
 
         return app;
     }
+
+    /// <summary>Request body for submission — CitizenId is deliberately absent; it comes from the token.</summary>
+    public sealed record SubmitServiceRequestBody(Guid ServiceId, string FormDataJson, string Priority = "NORMAL");
 
     // ═══════════════════════════════════════════════════════════════════════
     // SEED DATA — 5 demo services for graduation

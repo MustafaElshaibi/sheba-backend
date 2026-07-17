@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
-using Sheba.Shared.Kernel.Exceptions;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyLoginOtp;
 
@@ -18,34 +18,35 @@ public sealed class VerifyLoginOtpHandler(
     IIdentityRepository repository,
     IOtpHasher otpHasher,
     ILogger<VerifyLoginOtpHandler> logger
-) : IRequestHandler<VerifyLoginOtpCommand, VerifyLoginOtpResponse>
+) : IRequestHandler<VerifyLoginOtpCommand, Result<VerifyLoginOtpResponse>>
 {
     private const int MaxAttempts = 3;
 
-    public async Task<VerifyLoginOtpResponse> Handle(
+    public async Task<Result<VerifyLoginOtpResponse>> Handle(
         VerifyLoginOtpCommand request,
         CancellationToken cancellationToken)
     {
-        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.Account), request.AccountId);
+        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken);
+        if (account is null)
+            return Fail("resource", "Account not found.");
 
         if (account.Status != AccountStatus.Approved)
-            return Fail(account.Id, "Account is not active.");
+            return Fail("otp", "Account is not active.");
 
         if (account.IsLocked())
-            return Fail(account.Id, "Account is temporarily locked. Please try again later.");
+            return Fail("otp", "Account is temporarily locked. Please try again later.");
 
         var otpRecord = await repository.FindActiveOtpAsync(
             request.AccountId, OtpPurpose.Login, cancellationToken);
 
         if (otpRecord is null)
-            return Fail(account.Id, "No active login code found. Please start the login again.");
+            return Fail("otp", "No active login code found. Please start the login again.");
 
         if (otpRecord.IsExpired())
-            return Fail(account.Id, "The login code has expired. Please start the login again.");
+            return Fail("otp", "The login code has expired. Please start the login again.");
 
         if (otpRecord.AttemptCount >= MaxAttempts)
-            return Fail(account.Id, "Too many attempts. Please start the login again.");
+            return Fail("otp", "Too many attempts. Please start the login again.");
 
         otpRecord.RecordAttempt();
 
@@ -56,7 +57,7 @@ public sealed class VerifyLoginOtpHandler(
             logger.LogWarning(
                 "[VerifyLoginOtp] Invalid login OTP for AccountId={AccountId}, Attempt={Attempt}",
                 request.AccountId, otpRecord.AttemptCount);
-            return Fail(account.Id, remaining > 0
+            return Fail("otp", remaining > 0
                 ? $"Invalid code. {remaining} attempt(s) remaining."
                 : "Too many invalid attempts. Please start the login again.");
         }
@@ -68,17 +69,17 @@ public sealed class VerifyLoginOtpHandler(
 
         logger.LogInformation("[VerifyLoginOtp] Login OTP verified for AccountId={AccountId}", account.Id);
 
-        return new VerifyLoginOtpResponse(
-            Succeeded:     true,
+        return Result.Success(new VerifyLoginOtpResponse(
             AccountId:     account.Id,
             NationalId:    account.NationalId,
             Username:      account.Username,
             Email:         account.Email,
             FullNameEn:    account.FullNameEn,
-            IdentityLevel: account.IdentityLevel,
-            Message:       "Login successful.");
+            IdentityLevel: account.IdentityLevel));
     }
 
-    private static VerifyLoginOtpResponse Fail(Guid accountId, string message) =>
-        new(false, accountId, null, null, null, null, 0, message);
+    private static Result<VerifyLoginOtpResponse> Fail(string code, string message) =>
+        Result.Failure<VerifyLoginOtpResponse>(code == "resource"
+            ? Error.NotFound(code, message)
+            : Error.Validation(code, message));
 }

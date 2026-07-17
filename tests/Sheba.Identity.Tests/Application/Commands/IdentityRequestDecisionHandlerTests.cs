@@ -8,6 +8,7 @@ using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Entities;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Tests.Application.Commands;
 
@@ -26,8 +27,10 @@ public sealed class IdentityRequestDecisionHandlerTests
     {
         // CreateFromNidCheck → PendingVerification
         var acc = Account.CreateFromNidCheck("12345678901234", "+201001234567", "مواطن", "Citizen");
-        // Advance to PendingAdminApproval so that Approve/Reject guards are satisfied
+        // Advance to PendingAdminApproval so that Approve/Reject guards are satisfied:
+        // SetCredentials → PendingEmailVerification, MarkEmailVerified → PendingAdminApproval
         acc.SetCredentials("citizen01", "citizen@sheba.test", "argon2id-hash-placeholder");
+        acc.MarkEmailVerified();
         return acc;
     }
 
@@ -59,14 +62,15 @@ public sealed class IdentityRequestDecisionHandlerTests
         var result = await handler.Handle(command, default);
 
         // Assert
-        result.RequestId.Should().Be(request.Id);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RequestId.Should().Be(request.Id);
         request.Status.Should().Be(RequestStatus.Approved);
         request.DomainEvents.Should().ContainSingle(e => e.GetType().Name.Contains("Decided"));
         await _repo.Received(1).SaveChangesAsync(default);
     }
 
     [Fact]
-    public async Task Approve_AlreadyApprovedRequest_ThrowsDomainException()
+    public async Task Approve_AlreadyApprovedRequest_ReturnsConflictFailure()
     {
         // Arrange
         var account = MakeAccount();
@@ -80,10 +84,11 @@ public sealed class IdentityRequestDecisionHandlerTests
         var handler = new ApproveIdentityRequestHandler(_repo, NullLogger<ApproveIdentityRequestHandler>.Instance);
 
         // Act
-        Func<Task> act = () => handler.Handle(command, default);
+        var result = await handler.Handle(command, default);
 
-        // Assert — should throw because status is already Approved
-        await act.Should().ThrowAsync<DomainException>();
+        // Assert — should fail because status is already Approved
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Type.Should().Be(ErrorType.Conflict);
     }
 
     // ── Reject ────────────────────────────────────────────────────────────────
@@ -106,7 +111,8 @@ public sealed class IdentityRequestDecisionHandlerTests
         var result = await handler.Handle(command, default);
 
         // Assert
-        result.RequestId.Should().Be(request.Id);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RequestId.Should().Be(request.Id);
         request.Status.Should().Be(RequestStatus.Rejected);
         request.RejectionReason.Should().Be("Documents unclear");
         request.DomainEvents.Should().ContainSingle(e => e.GetType().Name.Contains("Decided"));

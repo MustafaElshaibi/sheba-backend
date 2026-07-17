@@ -5,18 +5,20 @@
 > Identity underpins everything; Ministry precedes ServiceRequest depth; durable events precede
 > Notification/Admin/Wallet guarantees.
 
-## Phase 0 — Harden the base *(current)*
+## Phase 0 — Harden the base *(complete)*
 
 Everything here is prerequisite plumbing; no new features.
 
-- **T-API-1** JSend envelope: `JSendResponse<T>` + wrapping filter + exception-middleware swap +
-  Swagger schema filter ([api-contract.md](api-contract.md)).
-- **T-DB-1** EF migrations for the 9 module contexts still on `EnsureCreated()`; ban the fallback.
-- **T-EVT-1** Outbox to Shared.Kernel + Hangfire dispatcher + per-module outbox tables + consumer
-  inbox dedup ([sheba.md §11.1](sheba.md#111-transactional-outbox-the-reliability-backbone)).
-- **T-SEC-2** ASP.NET `RateLimiter` policies (auth endpoints strictest).
-- **T-STD-1** `Result<T>` in Shared.Kernel; adopt per module in single passes.
-- Housekeeping: remove `Class1.cs` stubs (Citizen module), align README/quickstart.
+- ~~**T-API-1** JSend envelope: `JSendResponse<T>` + wrapping filter + exception-middleware swap +
+  Swagger schema filter ([api-contract.md](api-contract.md)).~~ Done.
+- ~~**T-DB-1** EF migrations for the 9 module contexts still on `EnsureCreated()`; ban the
+  fallback.~~ Done.
+- ~~**T-EVT-1** Outbox to Shared.Kernel + Hangfire dispatcher + per-module outbox tables + consumer
+  inbox dedup ([sheba.md §11.1](sheba.md#111-transactional-outbox-the-reliability-backbone)).~~ Done.
+- ~~**T-SEC-2** ASP.NET `RateLimiter` policies (auth endpoints strictest).~~ Done.
+- ~~**T-STD-1** `Result<T>` in Shared.Kernel; adopt per module in single passes.~~ Done — adopted
+  in Identity; remaining modules stay exception-based until their own pass.
+- ~~Housekeeping: remove `Class1.cs` stubs (Citizen module)~~ Done; align README/quickstart still open.
 
 **Exit:** all endpoints emit JSend; `docker compose up` from a clean volume migrates and seeds;
 kill -9 during a command loses no events; auth endpoints rate-limited.

@@ -2,7 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
-using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.RejectIdentityRequest;
 
@@ -17,23 +17,25 @@ namespace Sheba.Identity.Application.Commands.RejectIdentityRequest;
 public sealed class RejectIdentityRequestHandler(
     IIdentityRepository repository,
     ILogger<RejectIdentityRequestHandler> logger
-) : IRequestHandler<RejectIdentityRequestCommand, RejectIdentityRequestResponse>
+) : IRequestHandler<RejectIdentityRequestCommand, Result<RejectIdentityRequestResponse>>
 {
-    public async Task<RejectIdentityRequestResponse> Handle(
+    public async Task<Result<RejectIdentityRequestResponse>> Handle(
         RejectIdentityRequestCommand request,
         CancellationToken cancellationToken)
     {
-        var identityRequest = await repository.FindRequestByIdAsync(request.RequestId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.IdentityRequest), request.RequestId);
+        var identityRequest = await repository.FindRequestByIdAsync(request.RequestId, cancellationToken);
+        if (identityRequest is null)
+            return Result.Failure<RejectIdentityRequestResponse>(Error.NotFound("resource", "Identity request not found."));
 
         if (identityRequest.Status is not (RequestStatus.Pending or RequestStatus.UnderReview))
         {
-            throw new DomainException(
-                $"Cannot reject request in status {identityRequest.Status}.");
+            return Result.Failure<RejectIdentityRequestResponse>(Error.Conflict(
+                "domain", $"Cannot reject request in status {identityRequest.Status}."));
         }
 
-        var account = await repository.FindAccountByIdAsync(identityRequest.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.Account), identityRequest.AccountId);
+        var account = await repository.FindAccountByIdAsync(identityRequest.AccountId, cancellationToken);
+        if (account is null)
+            return Result.Failure<RejectIdentityRequestResponse>(Error.NotFound("resource", "Account not found."));
 
         identityRequest.Reject(request.ReviewedByAdminId, request.RejectionReason, request.Notes);
         account.Reject(request.RejectionReason);
@@ -44,9 +46,9 @@ public sealed class RejectIdentityRequestHandler(
             "[RejectIdentityRequest] RequestId={RequestId} rejected by AdminId={AdminId} Reason={Reason}",
             request.RequestId, request.ReviewedByAdminId, request.RejectionReason);
 
-        return new RejectIdentityRequestResponse(
+        return Result.Success(new RejectIdentityRequestResponse(
             RequestId: request.RequestId,
             AccountId: account.Id,
-            Message:   "Identity request rejected. Citizen has been notified.");
+            Message:   "Identity request rejected. Citizen has been notified."));
     }
 }

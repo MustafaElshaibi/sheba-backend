@@ -6,25 +6,25 @@ update the known-issues row in the same PR.
 
 ## Phase 0 — Harden the base (prerequisite plumbing)
 
-- [ ] **T-API-1** JSend everywhere: add `JSendResponse<T>` + `JSend` factories to
+- [x] **T-API-1** JSend everywhere: add `JSendResponse<T>` + `JSend` factories to
       `Sheba.Shared.Kernel/Responses/`; endpoint result filter on every module route group;
       replace ProblemDetails exception middleware with JSend `fail`/`error` mapping; 401/403
       challenge bodies; Swagger schema filter. Exempt `/connect/*`, `/.well-known/*`, Hangfire,
       Swagger. Spec: [docs/api-contract.md](docs/api-contract.md).
-- [ ] **T-DB-1** Create initial EF migrations for the 9 contexts without them (Citizen, Ministry,
+- [x] **T-DB-1** Create initial EF migrations for the 9 contexts without them (Citizen, Ministry,
       ServiceRequest, Document, Wallet, Payment, Notification, Audit, Admin); delete the
       `EnsureCreated()` fallback from `MigrationExtensions`; verify clean-volume
       `docker compose up`.
-- [ ] **T-EVT-1** Durable events: move outbox primitives to Shared.Kernel; per-module
+- [x] **T-EVT-1** Durable events: move outbox primitives to Shared.Kernel; per-module
       `outbox_messages` tables; Transaction behavior writes raised events to the outbox in the
       command's transaction (and register a real `IUnitOfWork`); Hangfire dispatcher (5 s poll,
       backoff, dead-letter); consumer inbox table keyed by `EventId` for idempotency.
-- [ ] **T-SEC-2** ASP.NET `RateLimiter`: strict sliding windows on `/api/identity/register`,
+- [x] **T-SEC-2** ASP.NET `RateLimiter`: strict sliding windows on `/api/identity/register`,
       `/login`, `/verify-otp`, `/connect/token`; sane defaults elsewhere; Redis-backed counters;
       429 as JSend `fail`.
-- [ ] **T-STD-1** Add `Result<T>`/`Error` to Shared.Kernel; adopt in Identity first (one module
+- [x] **T-STD-1** Add `Result<T>`/`Error` to Shared.Kernel; adopt in Identity first (one module
       per pass, never mixed styles within a module).
-- [ ] Housekeeping: delete `Class1.cs` stubs in `Modules/Citizen`.
+- [x] Housekeeping: delete `Class1.cs` stubs in `Modules/Citizen`.
 
 ## Phase 1 — Identity completion
 
@@ -35,6 +35,9 @@ update the known-issues row in the same PR.
       `RefreshTokenFamily` vs OpenIddict-native tracking (known-issues §3.5).
 - [ ] **T-AUTH-1** Ministry-Admin scoping: `ministry_id` claim + ownership policy applied to every
       `/api/ministry` and admin ServiceRequest endpoint; contract tests per the permission matrix.
+- [ ] **T-SEC-5** Access-token hardening for external RPs in production: enable OpenIddict
+      access-token encryption (or reference tokens + introspection); keep unencrypted JWTs in
+      dev for inspectability.
 - [ ] Password reset flow (OTP-gated) + account recovery rules in
       [docs/business-rules.md](docs/business-rules.md).
 - [ ] RP secret rotation endpoint + consent screen copy for `civil_data`.

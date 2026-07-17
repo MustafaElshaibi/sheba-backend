@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.RejectIdentityRequest;
 
@@ -13,7 +14,7 @@ public sealed record RejectIdentityRequestCommand(
     Guid   ReviewedByAdminId,
     string RejectionReason,
     string? Notes = null
-) : IRequest<RejectIdentityRequestResponse>;
+) : IRequest<Result<RejectIdentityRequestResponse>>;
 
 public sealed record RejectIdentityRequestResponse(
     Guid RequestId,

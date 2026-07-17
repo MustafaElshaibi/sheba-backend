@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Sheba.Ministry.Domain.Interfaces;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
 using Sheba.ServiceRequest.Domain.Enums;
 using Sheba.ServiceRequest.Domain.Interfaces;
@@ -9,10 +10,16 @@ namespace Sheba.ServiceRequest.Application.Commands.HandleWebhookCallback;
 
 /// <summary>
 /// Handles incoming webhook callbacks from ministry systems.
-/// Finds the waiting workflow step, stores the callback data, and advances the workflow.
+///
+/// SECURITY (§7.4 / BR-MI-5): the callback is verified — HMAC signature, timestamp window, and
+/// delivery-id dedup — BEFORE anything is parsed or any state changes. An unverified callback can
+/// advance a citizen's request through the workflow, so verification is the gate, not an
+/// afterthought. Verification lives behind the Ministry-owned <see cref="IMinistryWebhookVerifier"/>
+/// port because the signing secret and its decryption belong inside the Ministry boundary.
 /// </summary>
 public sealed class HandleWebhookCallbackHandler(
     IServiceRequestRepository requestRepo,
+    IMinistryWebhookVerifier webhookVerifier,
     IMediator mediator,
     ILogger<HandleWebhookCallbackHandler> logger
 ) : IRequestHandler<HandleWebhookCallbackCommand, HandleWebhookCallbackResponse>
@@ -20,6 +27,20 @@ public sealed class HandleWebhookCallbackHandler(
     public async Task<HandleWebhookCallbackResponse> Handle(
         HandleWebhookCallbackCommand command, CancellationToken ct)
     {
+        // ── Verify signature + timestamp + delivery id before ANY processing ──
+        var verification = await webhookVerifier.VerifyAsync(
+            command.MinistryId, command.EventType, command.PayloadJson,
+            command.Signature, command.Timestamp, command.DeliveryId, ct);
+
+        if (!verification.IsValid)
+        {
+            logger.LogWarning(
+                "[Webhook] Rejected callback from Ministry {MinistryId} ({EventType}): {Status}",
+                command.MinistryId, command.EventType, verification.Status);
+            // Deliberately vague to the caller — do not reveal which check failed.
+            return new HandleWebhookCallbackResponse(false, "Webhook verification failed.");
+        }
+
         // Parse the payload to find the request reference
         Guid? requestId = null;
         try

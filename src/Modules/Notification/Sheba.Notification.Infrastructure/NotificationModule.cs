@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Sheba.Notification.Infrastructure.Adapters;
 using Sheba.Notification.Infrastructure.Persistence;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Notification.Infrastructure;
 
@@ -40,7 +42,13 @@ public static class NotificationModule
                     npgsql.MigrationsAssembly(typeof(NotificationModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
+
+        // Expose as base DbContext so the startup migration runner discovers this context (T-DB-1).
+        services.AddScoped<DbContext>(sp => sp.GetRequiredService<NotificationDbContext>());
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<NotificationDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<NotificationDbContext>>();
 
         // ── 2. Email adapter ──────────────────────────────────────────────────
         // IEmailService is defined in Shared.Kernel so any module can inject it.

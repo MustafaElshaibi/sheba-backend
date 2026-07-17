@@ -4,8 +4,8 @@ using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Entities;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Identity.Domain.Interfaces;
-using Sheba.Shared.Kernel.Exceptions;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.RegisterCitizen;
 
@@ -28,9 +28,17 @@ public sealed class RegisterCitizenHandler(
     IOtpProvider otpProvider,
     IOtpHasher otpHasher,
     ILogger<RegisterCitizenHandler> logger
-) : IRequestHandler<RegisterCitizenCommand, RegisterCitizenResponse>
+) : IRequestHandler<RegisterCitizenCommand, Result<RegisterCitizenResponse>>
 {
-    public async Task<RegisterCitizenResponse> Handle(
+    // BR-ON-3: every registration-check failure — not found, deceased, suspended, expired,
+    // phone mismatch, AND already-registered — must return this single, identical message.
+    // Distinguishing them turns registration into an oracle for "does NID X hold a Sheba
+    // account / exist in the registry" (the enumeration attack GOV.UK One Login and UAE Pass
+    // deliberately avoid). Specific reasons are logged/audited internally only.
+    private const string GenericVerificationError =
+        "We could not verify your identity. Please check your National ID and phone number and try again.";
+
+    public async Task<Result<RegisterCitizenResponse>> Handle(
         RegisterCitizenCommand request,
         CancellationToken cancellationToken)
     {
@@ -52,8 +60,7 @@ public sealed class RegisterCitizenHandler(
                 MaskNid(request.NationalId), nidResult.Status);
 
             // Return the same error regardless of actual reason (no info leakage)
-            throw new DomainException(
-                "We could not verify your identity. Please check your National ID and phone number and try again.");
+            return Result.Failure<RegisterCitizenResponse>(Error.Conflict("domain", GenericVerificationError));
         }
 
         // ── Step 2: Guard — already registered ─────────────────────────────────
@@ -64,8 +71,11 @@ public sealed class RegisterCitizenHandler(
                 "[RegisterCitizen] NID {Nid} is already registered (AccountId={AccountId})",
                 MaskNid(request.NationalId), existing.Id);
 
-            throw new DomainException(
-                "This National ID is already registered in Sheba. Please login or use the account recovery flow.");
+            // Same generic error as the NID-check failure above — see GenericVerificationError.
+            // "Already registered" must not be distinguishable from "not in registry", or an
+            // attacker learns which NIDs already hold Sheba accounts. Account recovery is a
+            // separate, deliberately-initiated flow, not something we hint at here.
+            return Result.Failure<RegisterCitizenResponse>(Error.Conflict("domain", GenericVerificationError));
         }
 
         // ── Step 3: Create Account entity ───────────────────────────────────────
@@ -105,8 +115,8 @@ public sealed class RegisterCitizenHandler(
                 "[RegisterCitizen] OTP send failed for AccountId={AccountId}: {Error}",
                 account.Id, otpResult.ErrorMessage);
 
-            throw new DomainException(
-                "Could not send verification SMS. Please try again in a few minutes.");
+            return Result.Failure<RegisterCitizenResponse>(Error.Conflict(
+                "domain", "Could not send verification SMS. Please try again in a few minutes."));
         }
 
         // Hash the raw OTP code (Argon2id) — never store plaintext
@@ -129,9 +139,9 @@ public sealed class RegisterCitizenHandler(
             "[RegisterCitizen] Account created. AccountId={AccountId} RequestId={RequestId}",
             account.Id, identityRequest.Id);
 
-        return new RegisterCitizenResponse(
+        return Result.Success(new RegisterCitizenResponse(
             AccountId:   account.Id,
-            MaskedPhone: MaskPhone(nidResult.PhoneNumber));
+            MaskedPhone: MaskPhone(nidResult.PhoneNumber)));
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────

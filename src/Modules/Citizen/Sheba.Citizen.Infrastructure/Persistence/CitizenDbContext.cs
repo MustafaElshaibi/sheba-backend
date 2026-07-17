@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sheba.Citizen.Domain.Entities;
+using Sheba.Shared.Kernel.Outbox;
 
 namespace Sheba.Citizen.Infrastructure.Persistence;
 
@@ -9,12 +10,16 @@ namespace Sheba.Citizen.Infrastructure.Persistence;
 public sealed class CitizenDbContext : DbContext
 {
     public DbSet<CitizenProfile> CitizenProfiles => Set<CitizenProfile>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     public CitizenDbContext(DbContextOptions<CitizenDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
         mb.HasDefaultSchema("citizen");
+        mb.ApplyConfiguration(new OutboxMessageConfiguration());
+        mb.ApplyConfiguration(new InboxMessageConfiguration());
 
         mb.Entity<CitizenProfile>(e =>
         {

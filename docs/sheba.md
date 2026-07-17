@@ -204,7 +204,7 @@ same responsibilities. Designing it as a named module keeps that move mechanical
 ### 3.5 Request pipeline (Gateway responsibilities)
 
 ```
-HTTPS → ExceptionHandler (JSend error/fail) → Serilog request logging → Rate limiter [T-SEC-2]
+HTTPS → ExceptionHandler (JSend error/fail) → Serilog request logging → Rate limiter (T-SEC-2)
      → CORS → AuthN (OpenIddict validation) → AuthZ (policies) → JSend result wrapping
      → Module endpoint groups (minimal APIs) → MediatR pipeline:
         Logging → Validation (FluentValidation) → Authorization → Transaction+Outbox → Handler
@@ -695,10 +695,13 @@ Full per-table detail: [database-design.md](database-design.md).
 
 ### 8.4 Migrations
 
-EF Core migrations are the only sanctioned schema-change mechanism. **Gap:** today only Identity
-ships migrations; the other nine contexts fall back to `EnsureCreated()`, which cannot evolve
-schemas and is a drift risk — closing this is backlog item **T-DB-1** (priority: before any real
-data exists). `MigrateAllModulesAsync` at startup applies each module's migrations independently.
+EF Core migrations are the only sanctioned schema-change mechanism (**T-DB-1**, implemented). All
+ten contexts (Identity, Citizen, Ministry, ServiceRequest, Document, Wallet, Payment, Notification,
+Audit, Admin) ship an `InitialCreate` migration under their `Persistence/Migrations/` folder; the
+`EnsureCreated()` fallback has been removed from `MigrateAllModulesAsync`, so a context without
+migrations is now a build-time defect rather than a silent no-op. `MigrateAllModulesAsync` at
+startup applies each module's migrations independently, verified against a clean-volume
+`docker compose up`.
 
 ---
 
@@ -709,8 +712,11 @@ the **application-level** outcome; the HTTP status code carries the **transport-
 Both are always set; neither substitutes for the other. Full contract + endpoint catalog:
 [api-contract.md](api-contract.md).
 
-> **Status:** this is the target standard. Current code returns raw DTOs + RFC 7807 errors;
-> retrofit is backlog **T-API-1** (wrapper filter + exception-handler swap — small, mechanical).
+> **Status:** implemented (T-API-1). `JSendResponse<T>` + `JSend` factories live in
+> `Sheba.Shared.Kernel/Responses/`; every module route group registers `JSendWrappingFilter`;
+> the global exception middleware emits JSend `fail`/`error` (and OAuth error JSON on exempt
+> OIDC routes); bare 401/403 challenges are rewritten to JSend `fail` bodies; Swagger documents
+> the envelope via `JSendOperationFilter`.
 
 ### 9.1 The three envelopes
 
@@ -738,8 +744,8 @@ Both are always set; neither substitutes for the other. Full contract + endpoint
 
 ### 9.3 Implementation: one wrapper, zero hand-rolled envelopes
 
-- `JSendResult<T>` types + `JSend.Success(data)/Fail(dataDict)/Error(message, code)` factories in
-  `Sheba.Shared.Kernel` (new `Responses/` folder).
+- `JSendResponse<T>` type + `JSend.Success(data)/Fail(dataDict)/Error(message, code)` factories in
+  `Sheba.Shared.Kernel/Responses/`.
 - An **endpoint result filter** on every module route group wraps handler DTOs into `success`
   envelopes — controllers/endpoints never build envelopes by hand.
 - The **global exception middleware** maps: `ValidationException` → 400 `fail` (field-keyed
@@ -819,17 +825,36 @@ partially enforced today — completing it is **T-AUTH-1**.
 
 ### 11.1 Transactional outbox (the reliability backbone)
 
-Every state-changing handler appends its domain events to the module's `outbox_messages` table
-**in the same DB transaction** as the aggregate write. A Hangfire-scheduled dispatcher polls
-unpublished rows (every 5 s), publishes them through MediatR `IPublisher`, and marks them
-published; failures increment `retry_count` with backoff and dead-letter after N attempts.
+**Status: implemented (T-EVT-1).** `OutboxMessage`/`InboxMessage` live in `Sheba.Shared.Kernel.Outbox`,
+mapped into every module's own schema (one `outbox_messages` + `inbox_messages` table per module —
+never a shared table). A `SaveChangesInterceptor` (`OutboxSaveChangesInterceptor`, registered on
+every module's `DbContext`) converts each tracked aggregate's raised domain events into outbox rows
+in the *same* `SaveChanges` call as the aggregate write — this replaced the old pattern of
+publishing events in-process at SaveChanges, which had no durability (a crash between publish and
+commit could fire a handler for state that never landed).
 
-This kills the dual-write problem (DB committed but event lost — which today *can* happen, since
-events are dispatched in-process at SaveChanges with no durability). **Gap:** the outbox entity
-exists only in Identity and nothing drains it; **T-EVT-1** promotes outbox primitives to
-`Sheba.Shared.Kernel`, adds the dispatcher, and gives every module its outbox table. Consumers get
-an **inbox/processed-events table** keyed by `EventId` for idempotency (at-least-once delivery ⇒
-consumers must dedup).
+A single Hangfire recurring job (`OutboxDispatcherJob` in `Sheba.Api`, id `outbox-dispatcher`) polls
+every module's outbox table for `Pending`/`Failed` rows whose `next_attempt_at` has elapsed,
+deserializes the event by its stored CLR type name, publishes it through MediatR `IPublisher`, and
+marks it `Published`. Failures increment `attempts` with exponential backoff and flip to
+`DeadLettered` after 8 attempts. Hangfire's native recurring-job scheduler has no sub-minute cron
+granularity, so the job is scheduled every minute and internally re-polls every 5 s for the rest of
+its window — this hits the "5 s poll" target without the risk of self-rescheduling job chains
+accumulating across app restarts (Hangfire recurring jobs dedup by id).
+
+Consumers get an **inbox table** (`InboxMessage`, keyed by `(EventId, ConsumerName)`) for
+idempotency — at-least-once delivery means a retried event redelivers to *every* handler, not just
+the ones that previously failed, so each handler with a side effect checks/marks its own inbox row
+via `IInboxGuard` before/after doing its work. `IUnitOfWork` also went from an unregistered
+interface to a real `EfUnitOfWork<TContext>` per module, so `TransactionBehavior` now wraps
+`ITransactionalCommand` handlers in an actual DB transaction instead of silently no-oping.
+
+A supporting fix: the six domain event records (`AccountRegisteredEvent`,
+`IdentityRequestSubmittedEvent`, `IdentityRequestDecidedEvent`, `ServiceRequestSubmittedEvent`,
+`WorkflowStepCompletedEvent`, `ServiceRequestCompletedEvent`) exposed `EventId`/`OccurredAt` as
+get-only properties with no setter — `System.Text.Json` silently minted a *new* `EventId` on
+deserialization instead of restoring the original one, which would have broken inbox idempotency
+outright. Changed to `init` accessors so the outbox round-trip preserves identity.
 
 ### 11.2 Integration event catalog
 
@@ -899,8 +924,16 @@ re-encryption.
 - Password: 5 failures → exponential lock (account) + per-IP limiter.
 - OTP: 3 verification attempts per code; issuance capped (3 per 15 min per account, per-IP cap via
   Redis counters); previous codes invalidated on re-issue; codes are CSPRNG, hashed, 5-min TTL.
-- ASP.NET Core `RateLimiter` policies: strictest on `/api/identity/register|login|verify-otp` and
-  `/connect/token` (T-SEC-2 — currently absent, highest-priority security gap).
+- ASP.NET Core `RateLimiter` policies (T-SEC-2, implemented): Redis-backed sliding-window-log
+  limiters — `/api/identity/register` (5/5 min), `/api/identity/login` +
+  `/api/identity/login/verify-otp` (10/5 min), `/api/identity/verify-otp` (10/5 min),
+  `/connect/token` (30/min) — plus an in-memory global fallback (300/min per IP) on everything
+  else. Partitioned by caller IP via a Lua script (`ZREMRANGEBYSCORE`/`ZCARD`/`ZADD`/`PEXPIRE` on a
+  per-partition sorted set) so the trim-count-add is atomic under concurrent requests and the
+  counters survive process restarts / would coordinate correctly across future horizontal
+  instances. 429s render as JSend `fail` (key `rate_limit`) with a `Retry-After` header on every
+  route except `/connect/*`, which gets an OAuth-shaped `{"error":"slow_down", ...}` body instead,
+  matching the same wire-format exemption the exception middleware uses for OIDC routes.
 
 ### 13.3 Webhook replay protection
 
@@ -982,7 +1015,7 @@ point of the boundaries.
 | CQRS (logical split) | MediatR commands vs queries per module | Separate validation/transaction paths; queries stay allocation-light. No separate read DB — unwarranted at this scale except the BI read model |
 | Mediator | MediatR + pipeline behaviors | One seam for logging/validation/authz/transaction/outbox on every use case |
 | Repository + Unit of Work | Per-module repositories; UoW = EF transaction in TransactionBehavior | Domain stays persistence-ignorant; outbox rides the same transaction |
-| Transactional Outbox | Kernel primitives + Hangfire dispatcher (T-EVT-1) | Atomic state+event; survives crash between commit and publish |
+| Transactional Outbox | Kernel primitives + Hangfire dispatcher (T-EVT-1, implemented) | Atomic state+event; survives crash between commit and publish |
 | Strategy / Provider | `INationalIdProvider`, `IOtpProvider`, `IMinistryAuthAdapter`, `IPaymentGateway` | Config-selected implementations; dev mocks are first-class |
 | Adapter / Anti-Corruption Layer | Ministry auth adapters + `HttpNationalIdProvider` | External protocol shapes never leak into domain models |
 | Observer | Webhook receipts; MediatR notification handlers | Ministries push instead of Sheba polling |
@@ -990,9 +1023,23 @@ point of the boundaries.
 | Options pattern | `NationalId:*`, `Otp:*`, `Ministry:EncryptionKey`, OpenIddict config | Typed, validated config; provider switching without code edits |
 | Step-based process manager | `ServiceWorkflowStep` engine | Admin-authored workflows as data; explicit failure branches (vs. code-bound sagas) |
 
-Error-flow note: the codebase currently throws typed exceptions (`DomainException` etc.) which the
-middleware maps to JSend — acceptable. Introducing `Result<T>` in the shared kernel for *expected*
-failures (validation, not-found) is backlog **T-STD-1**; do it once, mechanically, not piecemeal.
+Error-flow note (T-STD-1, implemented): `Sheba.Shared.Kernel.Results` holds `Result`/`Result<T>` +
+`Error`/`ErrorType`, adopted module-wide in Identity — all 12 command/query handlers return a
+`Result<T>` for expected failures (validation, not-found, business-rule conflicts) instead of
+throwing. `ResultHttpExtensions.ToHttpResult()` translates a `Result<T>` into the *same* JSend
+shape and HTTP status the exception middleware already produces for the equivalent exception type
+(`ErrorType.Validation`→400, `.NotFound`→404, `.Conflict`→422, `.Unauthorized`→403), so endpoints
+collapse to one line — `return result.ToHttpResult();` — with no per-endpoint success/failure
+branching. One deliberate shape fix along the way: four handlers (`VerifyOtp`, `VerifyLoginOtp`,
+`LoginCitizen`, `VerifyEmail`) previously returned an ad-hoc `{succeeded, message}` DTO as the
+`fail` envelope's `data` on failure; they now render the same field-keyed dict every other `fail`
+response uses (e.g. `{"otp": "..."}`), consistent with [api-contract.md](api-contract.md). The
+OIDC token-issuance path (`OidcEndpoints.IssueCitizenTokenAsync` / `IssueAdminTokenAsync`, which
+consume `VerifyLoginOtpCommand` / `LoginAdminCommand`) checks `result.IsFailure` /
+`result.Error!.Message` directly and keeps speaking OAuth error JSON — `Result<T>` has one
+producer per handler but each consumer renders it in its own wire format. Other modules still
+throw `DomainException` et al.; adopt Result the same way, one module per pass, never mixing
+styles within a module.
 
 ---
 
@@ -1004,7 +1051,7 @@ task-level checklist: [TASKS.md](../TASKS.md).
 
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
-| **0 — Hardening the base** *(now)* | JSend wrapper (T-API-1), per-module migrations (T-DB-1), outbox + dispatcher + inbox (T-EVT-1), rate limiting (T-SEC-2), shared-kernel `Result<T>` (T-STD-1) | All endpoints emit JSend; `docker compose up` from scratch migrates cleanly; events survive process kill |
+| **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
 | **1 — Identity completion** | Admin TOTP (T-SEC-1), signing-cert rotation (T-SEC-4), password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
 | **2 — Integration depth** | Webhook replay protection end-to-end (T-SRV-1), JSON-Schema form validation (T-SRV-2), OpenCRVS provider (T-INT-1), ministry health dashboard | A real external system round-trips a service request incl. async webhook |
 | **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
@@ -1022,7 +1069,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R1 | Modular monolith, strict module boundaries, separate schemas, no cross-module DB reads, mediator + integration events | §3.1, §8.2, §11 | All | Implemented |
 | R2 | Ten bounded contexts incl. Gateway | §3.3, §5 | All | Implemented (Gateway = middleware, §5.11) |
 | R3 | Migration path / extraction seams | §3.4, §11.4 | All | Designed |
-| R4 | DDD, CQRS, Mediator, Repo+UoW, Outbox, Strategy, ACL/Adapter, Result, Options | §15 | All | Implemented except outbox dispatcher (T-EVT-1), Result (T-STD-1) |
+| R4 | DDD, CQRS, Mediator, Repo+UoW, Outbox, Strategy, ACL/Adapter, Result, Options | §15 | All | Implemented — `Result<T>` (T-STD-1) adopted in Identity; other modules still exception-based, convert one module per pass |
 | R5 | Onboarding: registry NID+phone match → credentials → admin queue → dual email notifications → activation gate | §6.2 | Identity, Notification | Implemented |
 | R6 | No login without active approved identity | §6.2 rule 6 | Identity | Implemented |
 | R7 | Login: NID/username + password, then phone OTP | §6.3 | Identity | Implemented (custom grant) |
@@ -1035,14 +1082,14 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R14 | Service catalog: category, eligibility, required docs, fees, SLA, endpoint binding | §5.4 | ServiceRequest | Implemented |
 | R15 | Request lifecycle with status events + audit trail | §5.4.1 | ServiceRequest, Audit | Implemented |
 | R16 | RBAC: System Admin (also citizen, creates admins), Ministry Admin (own ministry only), Citizen; permission matrix | §10 | Identity + Gateway | Implemented; per-ministry scoping T-AUTH-1 |
-| R17 | JSend everywhere + HTTP mapping + shared wrapper + global exception handler + worked examples + api-contract.md | §9, [api-contract.md](api-contract.md) | Gateway/Kernel | **Designed; retrofit T-API-1** |
+| R17 | JSend everywhere + HTTP mapping + shared wrapper + global exception handler + worked examples + api-contract.md | §9, [api-contract.md](api-contract.md) | Gateway/Kernel | Implemented (T-API-1) |
 | R18 | Normalized schema per module + ERD per context + IDs-only cross-context | §8, diagrams/erd-*.mmd | All | Implemented |
 | R19 | PII map, encryption, retention | §8.3 | All | Partially implemented (T-SEC-6/7) |
 | R20 | Tamper-evident audit logging | §5.9, §13.5 | Audit | Basic implemented; tamper-evidence T-AUD-1..3 |
 | R21 | Notifications email/SMS/push via provider abstraction | §5.8 | Notification | Email/SMS implemented; push deferred |
 | R22 | Payments & fees | §5.7 | Payment | Mock; T-PAY-1 |
 | R23 | Wallet with W3C VCs | §5.6 | Wallet | Implemented (JWT-VC) |
-| R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Routing+auth implemented; rate limiting T-SEC-2 |
+| R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |
 | R26 | Docker compose single server, segmented services, scaling story | §14 | — | Implemented |
 | R27 | Secrets mgmt, key rotation, refresh revocation, brute-force/OTP protection, webhook replay, input validation, STRIDE | §13 | — | Designed; gaps T-SEC-1..7 |
@@ -1050,7 +1097,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R29 | SSO for government services | §6.7 | Identity | Implemented |
 | R30 | Document management | §5.5 | Document | Implemented |
 | R31 | Analytics, reporting, audit logging | §12, §5.9 | Admin, Audit | Implemented |
-| R32 | Event-driven architecture | §11 | All | In-process implemented; durability T-EVT-1 |
+| R32 | Event-driven architecture | §11 | All | Implemented — durable outbox + dispatcher + inbox (T-EVT-1) |
 | R33 | Pluggable civil-registry ("any registry can be plugged in") | §6.5, A4 | Identity | Implemented |
 | R34 | SAML support (brief lists it) | A8, §7.2 | Ministry | **Deliberately deferred** — enum reserved, no implementation (documented deviation) |
 | R35 | Dev DB with full citizen details for development only | §6.5, README quickstart | Identity | Implemented (8 mock citizens) |
@@ -1063,8 +1110,8 @@ Every capability/behavior from the project brief → where it is designed and wh
 |------|-----------|--------|-----------|
 | Real civil-registry API differs wildly from the assumed contract | High | High | ACL boundary is one interface (§6.5); budget an adapter sprint, not a redesign; OpenCRVS adapter (T-INT-1) proves a second shape early |
 | Registry or SMS gateway outage blocks onboarding/login | High | High | Onboarding fails closed with queued retry UX; login never depends on the registry; multiple `IOtpProvider`s with failover order (T-INT-2) |
-| Events lost on crash (no outbox dispatcher today) | Medium | High | T-EVT-1 is Phase 0; until then, restart-and-reconcile runbook |
-| Schema drift from `EnsureCreated()` fallback | High (over time) | Medium | T-DB-1 in Phase 0 — before real data exists |
+| Events lost on crash | ~~Medium~~ Mitigated | High | T-EVT-1 closed: outbox + Hangfire dispatcher + inbox idempotency now durable |
+| Schema drift from `EnsureCreated()` fallback | ~~High (over time)~~ Mitigated | Medium | T-DB-1 closed: all ten contexts have EF migrations, fallback removed |
 | OTP SMS cost-flooding attack | Medium | Medium | Issuance caps + per-IP limits + provider spend alarms (§13.2) |
 | Admin-approval queue becomes the bottleneck at scale | Medium | Medium | Risk-scored triage (auto-flag anomalies), reviewer sub-roles, SLA metrics already in BI model |
 | Single-server SPOF | Certain (by design) | Medium at pilot | Nightly off-box backups + documented restore; scale ladder §14.2 when uptime demands it |

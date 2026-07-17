@@ -10,6 +10,9 @@ using Sheba.Admin.Infrastructure.Jobs;
 using Sheba.Admin.Infrastructure.Persistence;
 using Sheba.Admin.Infrastructure.Reports;
 using Sheba.Admin.Infrastructure.Repositories;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Admin.Infrastructure;
 
@@ -42,7 +45,13 @@ public static class AdminModule
                     npgsql.MigrationsHistoryTable("__ef_migrations", "admin_data");
                     npgsql.MigrationsAssembly(typeof(AdminModule).Assembly.FullName);
                 })
-            .UseSnakeCaseNamingConvention());
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(new OutboxSaveChangesInterceptor()));
+
+        // Expose as base DbContext so the startup migration runner discovers this context (T-DB-1).
+        services.AddScoped<DbContext>(sp => sp.GetRequiredService<AdminDbContext>());
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<AdminDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<AdminDbContext>>();
 
         // ── 3. Repository ──────────────────────────────────────────────────────
         services.AddScoped<IAdminAnalyticsRepository, AdminAnalyticsRepository>();

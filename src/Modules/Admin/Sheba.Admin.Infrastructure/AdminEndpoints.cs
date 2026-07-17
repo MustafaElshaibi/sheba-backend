@@ -18,7 +18,8 @@ internal static class AdminEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/admin")
-            .WithTags("Admin");
+            .WithTags("Admin")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── Analytics KPIs ─────────────────────────────────────────────────────
         group.MapGet("/analytics/kpis", async (IMediator mediator, CancellationToken ct) =>

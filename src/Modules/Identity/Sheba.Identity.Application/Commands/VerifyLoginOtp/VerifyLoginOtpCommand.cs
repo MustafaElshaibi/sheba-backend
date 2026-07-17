@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyLoginOtp;
 
@@ -17,15 +18,14 @@ namespace Sheba.Identity.Application.Commands.VerifyLoginOtp;
 public sealed record VerifyLoginOtpCommand(
     Guid   AccountId,
     string Otp
-) : IRequest<VerifyLoginOtpResponse>;
+) : IRequest<Result<VerifyLoginOtpResponse>>;
 
+/// <summary>Response for a successful VerifyLoginOtpCommand — failures are carried by Result&lt;T&gt;.Error.</summary>
 public sealed record VerifyLoginOtpResponse(
-    bool    Succeeded,
     Guid    AccountId,
     string? NationalId,
     string? Username,
     string? Email,
     string? FullNameEn,
-    int     IdentityLevel,
-    string? Message = null
+    int     IdentityLevel
 );

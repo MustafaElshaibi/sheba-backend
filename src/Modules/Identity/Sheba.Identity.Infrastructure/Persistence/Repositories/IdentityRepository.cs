@@ -1,10 +1,8 @@
-using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Entities;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Identity.Infrastructure.Persistence;
-using Sheba.Shared.Kernel.Entities;
 
 namespace Sheba.Identity.Infrastructure.Persistence.Repositories;
 
@@ -15,15 +13,12 @@ namespace Sheba.Identity.Infrastructure.Persistence.Repositories;
 /// All methods are async; queries use AsNoTracking where the entity is read-only.
 /// Writable entities are tracked so that SaveChangesAsync persists the changes.
 ///
-/// Domain event dispatch: Before committing to the database, SaveChangesAsync
-/// collects all domain events from tracked entities, publishes them via MediatR
-/// IPublisher (so notification handlers fire), then clears the events and persists.
-/// This keeps domain events in-process and within the same transaction window.
+/// Domain event dispatch: SaveChangesAsync is a plain passthrough to the DbContext.
+/// The OutboxSaveChangesInterceptor (registered on IdentityDbContext, T-EVT-1) converts
+/// raised domain events into outbox_messages rows in the same SaveChanges call, so events
+/// commit atomically with the aggregate write. A separate Hangfire dispatcher publishes them.
 /// </summary>
-public sealed class IdentityRepository(
-    IdentityDbContext db,
-    IPublisher publisher
-) : IIdentityRepository
+public sealed class IdentityRepository(IdentityDbContext db) : IIdentityRepository
 {
     // ── Account ───────────────────────────────────────────────────────────────
 
@@ -121,45 +116,7 @@ public sealed class IdentityRepository(
     public async Task<AdminUser?> FindAdminByIdAsync(Guid adminId, CancellationToken ct = default)
         => await db.AdminUsers.FirstOrDefaultAsync(a => a.Id == adminId, ct);
 
-    // ── Outbox ───────────────────────────────────────────────────────────────
-    public async Task AddOutboxMessageAsync(OutboxMessage message, CancellationToken ct = default)
-        => await db.OutboxMessages.AddAsync(message, ct);
-
     // ── Unit of Work ─────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Publishes domain events raised by all tracked entities (via IPublisher/MediatR)
-    /// then persists changes to the database.
-    ///
-    /// Event dispatch order: publish BEFORE SaveChanges so event handlers can
-    /// add their own changes within the same unit of work (they use their own
-    /// module's DbContext, so there's no risk of cross-module EF conflict).
-    /// </summary>
     public async Task<int> SaveChangesAsync(CancellationToken ct = default)
-    {
-        // Collect domain events from all tracked entities
-        var entities = db.ChangeTracker
-                         .Entries<BaseEntity>()
-                         .Where(e => e.Entity.DomainEvents.Count > 0)
-                         .Select(e => e.Entity)
-                         .ToList();
-
-        var domainEvents = entities
-            .SelectMany(e => e.DomainEvents)
-            .ToList();
-
-        // Clear events from entities before publishing (prevent double dispatch)
-        foreach (var entity in entities)
-            entity.ClearDomainEvents();
-
-        // Publish domain events — this triggers MediatR notification handlers
-        // (SendApprovalEmailHandler, SendRejectionEmailHandler, etc.)
-        foreach (var domainEvent in domainEvents)
-        {
-            if (domainEvent is INotification notification)
-                await publisher.Publish(notification, ct);
-        }
-
-        return await db.SaveChangesAsync(ct);
-    }
+        => await db.SaveChangesAsync(ct);
 }

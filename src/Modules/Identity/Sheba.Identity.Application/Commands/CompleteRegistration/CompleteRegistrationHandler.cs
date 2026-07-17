@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Identity.Domain.Interfaces;
-using Sheba.Shared.Kernel.Exceptions;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.CompleteRegistration;
 
@@ -23,20 +23,21 @@ public sealed class CompleteRegistrationHandler(
     IPasswordHasher passwordHasher,
     IOtpProvider otpProvider,
     ILogger<CompleteRegistrationHandler> logger
-) : IRequestHandler<CompleteRegistrationCommand, CompleteRegistrationResponse>
+) : IRequestHandler<CompleteRegistrationCommand, Result<CompleteRegistrationResponse>>
 {
-    public async Task<CompleteRegistrationResponse> Handle(
+    public async Task<Result<CompleteRegistrationResponse>> Handle(
         CompleteRegistrationCommand request,
         CancellationToken cancellationToken)
     {
         // ── Load account ──────────────────────────────────────────────────────
-        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.Account), request.AccountId);
+        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken);
+        if (account is null)
+            return Result.Failure<CompleteRegistrationResponse>(Error.NotFound("resource", "Account not found."));
 
         if (account.Status != AccountStatus.PendingVerification || account.PhoneVerifiedAt is null)
         {
-            throw new DomainException(
-                "Phone number must be verified before completing registration.");
+            return Result.Failure<CompleteRegistrationResponse>(Error.Conflict(
+                "domain", "Phone number must be verified before completing registration."));
         }
 
         // ── Guard: unique username ────────────────────────────────────────────
@@ -44,7 +45,8 @@ public sealed class CompleteRegistrationHandler(
             request.Username, cancellationToken);
         if (existingByUsername is not null && existingByUsername.Id != request.AccountId)
         {
-            throw new DomainException("This username is already taken. Please choose another.");
+            return Result.Failure<CompleteRegistrationResponse>(Error.Conflict(
+                "domain", "This username is already taken. Please choose another."));
         }
 
         // ── Set credentials (Argon2id hash via IPasswordHasher) ──────────────
@@ -79,9 +81,9 @@ public sealed class CompleteRegistrationHandler(
             "[CompleteRegistration] AccountId={AccountId} completed registration step — awaiting email verification",
             account.Id);
 
-        return new CompleteRegistrationResponse(
+        return Result.Success(new CompleteRegistrationResponse(
             AccountId:         account.Id,
             IdentityRequestId: Guid.Empty,
-            Message:           "Registration details saved. Please check your email and verify your address.");
+            Message:           "Registration details saved. Please check your email and verify your address."));
     }
 }

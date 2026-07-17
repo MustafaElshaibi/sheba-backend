@@ -3,28 +3,29 @@ using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Entities;
 using Sheba.Identity.Domain.Enums;
-using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyEmail;
 
 public sealed class VerifyEmailHandler(
     IIdentityRepository repository,
     ILogger<VerifyEmailHandler> logger
-) : IRequestHandler<VerifyEmailCommand, VerifyEmailResponse>
+) : IRequestHandler<VerifyEmailCommand, Result<VerifyEmailResponse>>
 {
     private const int TokenExpiryMinutes = 15;
 
-    public async Task<VerifyEmailResponse> Handle(
+    public async Task<Result<VerifyEmailResponse>> Handle(
         VerifyEmailCommand request,
         CancellationToken cancellationToken)
     {
-        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Account), request.AccountId);
+        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken);
+        if (account is null)
+            return Result.Failure<VerifyEmailResponse>(Error.NotFound("resource", "Account not found."));
 
         if (account.Status != AccountStatus.PendingEmailVerification)
         {
-            return new VerifyEmailResponse(false,
-                $"Email verification is not applicable in status {account.Status}.");
+            return Result.Failure<VerifyEmailResponse>(Error.Conflict(
+                "domain", $"Email verification is not applicable in status {account.Status}."));
         }
 
         var otpRecord = await repository.FindActiveOtpAsync(
@@ -32,20 +33,20 @@ public sealed class VerifyEmailHandler(
 
         if (otpRecord is null)
         {
-            return new VerifyEmailResponse(false,
-                "No active email verification token found. Please restart registration.");
+            return Result.Failure<VerifyEmailResponse>(Error.Validation(
+                "token", "No active email verification token found. Please restart registration."));
         }
 
         if (otpRecord.IsExpired())
         {
-            return new VerifyEmailResponse(false,
-                "The email verification link has expired. Please restart registration.");
+            return Result.Failure<VerifyEmailResponse>(Error.Validation(
+                "token", "The email verification link has expired. Please restart registration."));
         }
 
         if (otpRecord.AttemptCount >= 3)
         {
-            return new VerifyEmailResponse(false,
-                "Too many attempts. Please restart registration.");
+            return Result.Failure<VerifyEmailResponse>(Error.Validation(
+                "token", "Too many attempts. Please restart registration."));
         }
 
         otpRecord.RecordAttempt();
@@ -53,8 +54,8 @@ public sealed class VerifyEmailHandler(
         if (otpRecord.CodeHash != request.Token)
         {
             await repository.SaveChangesAsync(cancellationToken);
-            return new VerifyEmailResponse(false,
-                "Invalid verification link. Please request a new one.");
+            return Result.Failure<VerifyEmailResponse>(Error.Validation(
+                "token", "Invalid verification link. Please request a new one."));
         }
 
         otpRecord.MarkUsed();
@@ -73,7 +74,7 @@ public sealed class VerifyEmailHandler(
             "[VerifyEmail] Email verified for AccountId={AccountId}",
             request.AccountId);
 
-        return new VerifyEmailResponse(true,
-            "Email verified successfully. Your account is now awaiting admin review.");
+        return Result.Success(new VerifyEmailResponse(
+            "Email verified successfully. Your account is now awaiting admin review."));
     }
 }

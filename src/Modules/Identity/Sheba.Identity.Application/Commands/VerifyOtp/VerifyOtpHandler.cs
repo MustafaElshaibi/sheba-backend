@@ -2,8 +2,8 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
-using Sheba.Shared.Kernel.Exceptions;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyOtp;
 
@@ -18,41 +18,36 @@ public sealed class VerifyOtpHandler(
     IIdentityRepository repository,
     IOtpHasher otpHasher,
     ILogger<VerifyOtpHandler> logger
-) : IRequestHandler<VerifyOtpCommand, VerifyOtpResponse>
+) : IRequestHandler<VerifyOtpCommand, Result<VerifyOtpResponse>>
 {
     private const int MaxAttempts = 3;
 
-    public async Task<VerifyOtpResponse> Handle(
+    public async Task<Result<VerifyOtpResponse>> Handle(
         VerifyOtpCommand request,
         CancellationToken cancellationToken)
     {
-        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Domain.Entities.Account), request.AccountId);
+        var account = await repository.FindAccountByIdAsync(request.AccountId, cancellationToken);
+        if (account is null)
+            return Result.Failure<VerifyOtpResponse>(Error.NotFound("resource", "Account not found."));
 
         // Only pending-verification accounts may submit an OTP
         if (account.Status != AccountStatus.PendingVerification)
         {
-            throw new DomainException(
-                $"Account is in status {account.Status} — OTP verification is not applicable.");
+            return Result.Failure<VerifyOtpResponse>(Error.Conflict(
+                "domain", $"Account is in status {account.Status} — OTP verification is not applicable."));
         }
 
         var otpRecord = await repository.FindActiveOtpAsync(
             request.AccountId, OtpPurpose.Registration, cancellationToken);
 
         if (otpRecord is null)
-        {
-            return new VerifyOtpResponse(Succeeded: false, Message: "No active OTP found. Please request a new code.");
-        }
+            return Result.Failure<VerifyOtpResponse>(Error.Validation("otp", "No active OTP found. Please request a new code."));
 
         if (otpRecord.IsExpired())
-        {
-            return new VerifyOtpResponse(Succeeded: false, Message: "The verification code has expired. Please request a new one.");
-        }
+            return Result.Failure<VerifyOtpResponse>(Error.Validation("otp", "The verification code has expired. Please request a new one."));
 
         if (otpRecord.AttemptCount >= MaxAttempts)
-        {
-            return new VerifyOtpResponse(Succeeded: false, Message: "Too many attempts. Please request a new verification code.");
-        }
+            return Result.Failure<VerifyOtpResponse>(Error.Validation("otp", "Too many attempts. Please request a new verification code."));
 
         // Increment attempt before validating (prevents timing-based enumeration)
         otpRecord.RecordAttempt();
@@ -65,10 +60,9 @@ public sealed class VerifyOtpHandler(
                 request.AccountId, otpRecord.AttemptCount);
 
             int remaining = MaxAttempts - otpRecord.AttemptCount;
-            return new VerifyOtpResponse(Succeeded: false,
-                Message: remaining > 0
-                    ? $"Invalid code. {remaining} attempt(s) remaining."
-                    : "Too many invalid attempts. Please request a new code.");
+            return Result.Failure<VerifyOtpResponse>(Error.Validation("otp", remaining > 0
+                ? $"Invalid code. {remaining} attempt(s) remaining."
+                : "Too many invalid attempts. Please request a new code."));
         }
 
         // ── Success ──────────────────────────────────────────────────────────
@@ -81,6 +75,6 @@ public sealed class VerifyOtpHandler(
             "[VerifyOtp] Phone verified successfully for AccountId={AccountId}",
             request.AccountId);
 
-        return new VerifyOtpResponse(Succeeded: true, Message: "Phone number verified successfully.");
+        return Result.Success(new VerifyOtpResponse("Phone number verified successfully."));
     }
 }

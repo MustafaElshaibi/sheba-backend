@@ -32,8 +32,10 @@ public sealed class IssueIdentityCredentialHandler(
         }
 
         // Fetch verified claims from the Identity module (cross-module via MediatR query)
-        var account = await mediator.Send(new GetAccountByIdQuery(command.AccountId), ct)
-            ?? throw new NotFoundException("Account", command.AccountId);
+        var accountResult = await mediator.Send(new GetAccountByIdQuery(command.AccountId), ct);
+        if (accountResult.IsFailure)
+            throw new NotFoundException("Account", command.AccountId);
+        var account = accountResult.Value;
 
         // Build + RSA-sign the VC-JWT
         var claims = new IdentityCredentialClaims(

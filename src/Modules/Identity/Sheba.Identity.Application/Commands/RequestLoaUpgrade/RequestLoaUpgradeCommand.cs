@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.RequestLoaUpgrade;
 
@@ -14,7 +15,7 @@ namespace Sheba.Identity.Application.Commands.RequestLoaUpgrade;
 public sealed record RequestLoaUpgradeCommand(
     Guid AccountId,
     int  TargetLevel
-) : IRequest<RequestLoaUpgradeResponse>;
+) : IRequest<Result<RequestLoaUpgradeResponse>>;
 
 public sealed record RequestLoaUpgradeResponse(
     Guid   IdentityRequestId,

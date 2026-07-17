@@ -21,6 +21,17 @@ public sealed class GetDocumentDownloadUrlHandler(
             return null;
         }
 
+        // BR-DO-1: owners see only their own documents (a time-boxed access grant for non-owners
+        // is designed but not yet implemented — until then, non-admin non-owners get null, same
+        // as "not found", so this never confirms another citizen's document exists).
+        if (!query.IsAdmin && doc.OwnerId != query.ActorId)
+        {
+            logger.LogWarning(
+                "[GetDocumentDownloadUrl] Actor {ActorId} is not the owner of Document {Id}",
+                query.ActorId, query.DocumentId);
+            return null;
+        }
+
         var url = await storage.GetPresignedDownloadUrlAsync(doc.BucketName, doc.ObjectKey, UrlExpiry, ct);
 
         return new DocumentDownloadUrlDto(

@@ -1,10 +1,13 @@
 using FluentValidation;
+using Hangfire;
 using MediatR;
 using Serilog;
 using Sheba.Admin.Infrastructure;
 using Sheba.Api.Behaviors;
 using Sheba.Api.Extensions;
 using Sheba.Api.Middleware;
+using Sheba.Api.Outbox;
+using Sheba.Api.RateLimiting;
 using Sheba.Audit.Infrastructure;
 using Sheba.Citizen.Infrastructure;
 using Sheba.Document.Infrastructure;
@@ -34,12 +37,15 @@ try
         .WriteTo.Seq(ctx.Configuration["Seq:ServerUrl"] ?? "http://localhost:5341"));
 
     // ── Redis — singleton connection multiplexer ───────────────────────────────────────────────
-    builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
-        ConnectionMultiplexer.Connect(
-            builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379"));
+    var redisMultiplexer = ConnectionMultiplexer.Connect(
+        builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379");
+    builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
 
     builder.Services.AddStackExchangeRedisCache(options =>
         options.Configuration = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379");
+
+    // ── Rate limiting (T-SEC-2) — Redis-backed sliding windows on auth-sensitive endpoints ──────
+    builder.Services.AddShebaRateLimiting(redisMultiplexer);
 
     // ── Module Registration ────────────────────────────────────────────────────────────────────
     // Each module registers its own DbContext, repositories, adapters, and validators.
@@ -86,6 +92,9 @@ try
     builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
 
     // ── FluentValidation — auto-discovers all validators in all module assemblies ──────────────
+    // Both Infrastructure AND Application assemblies: command validators live in Application
+    // (e.g. RegisterCitizenValidator) — scanning only Infrastructure silently registers nothing
+    // and ValidationBehavior becomes a no-op (the empty-body register 500 bug).
     builder.Services.AddValidatorsFromAssemblies(
     [
         typeof(IdentityModule).Assembly,
@@ -97,7 +106,14 @@ try
         typeof(PaymentModule).Assembly,
         typeof(NotificationModule).Assembly,
         typeof(AuditModule).Assembly,
-        typeof(AdminModule).Assembly
+        typeof(AdminModule).Assembly,
+        // Application assemblies (where the validators actually are)
+        typeof(Sheba.Identity.Application.Commands.RegisterCitizen.RegisterCitizenValidator).Assembly,
+        typeof(Sheba.Ministry.Application.Commands.CreateMinistry.CreateMinistryCommand).Assembly,
+        typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
+        typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,
+        typeof(Sheba.Wallet.Application.Commands.IssueIdentityCredential.IssueIdentityCredentialCommand).Assembly,
+        typeof(Sheba.Admin.Application.Analytics.GetKpiSummary.GetKpiSummaryQuery).Assembly
     ]);
 
     // ── Swagger / OpenAPI ────────────────────────────────────────────────────────────────────────
@@ -156,15 +172,37 @@ try
 
         // Resolve schema-id conflicts (records with the same short name across modules)
         options.CustomSchemaIds(t => t.FullName?.Replace("+", ".") ?? t.Name);
+
+        // Document the JSend envelope on every non-exempt response (T-API-1)
+        options.OperationFilter<Sheba.Api.Swagger.JSendOperationFilter>();
     });
 
     // ── Authorization ─────────────────────────────────────────────────────────────────────────
-    // Authentication is configured inside IdentityModule.cs via OpenIddict's UseAspNetCore()
-    builder.Services.AddAuthorization();
+    // Authentication is configured inside IdentityModule.cs via OpenIddict's UseAspNetCore().
+    //
+    // Policy names are matched against the "role" claim, which OidcEndpoints sets to "Citizen"
+    // for citizen tokens and to the AdminRole enum name (SuperAdmin, IdentityReviewer,
+    // MinistryManager, Auditor, Support) for admin tokens — see §10.1. Policies compose the
+    // "which admin sub-roles may act" question; per-resource ownership (a citizen touching only
+    // their own data, a Ministry Admin touching only their own ministry) is enforced in handlers,
+    // not here, per the same design note in docs/sheba.md §10 — a claims-based policy can't
+    // express "this ministry_id row belongs to this admin" on its own.
+    const string RoleClaim = "role";
+    builder.Services.AddAuthorizationBuilder()
+        .AddPolicy("CitizenOnly", p => p.RequireClaim(RoleClaim, "Citizen"))
+        .AddPolicy("SuperAdminOnly", p => p.RequireClaim(RoleClaim, "SuperAdmin"))
+        .AddPolicy("IdentityReviewer", p => p.RequireClaim(RoleClaim, "SuperAdmin", "IdentityReviewer"))
+        .AddPolicy("MinistryManager", p => p.RequireClaim(RoleClaim, "SuperAdmin", "MinistryManager"))
+        .AddPolicy("Auditor", p => p.RequireClaim(RoleClaim, "SuperAdmin", "Auditor"))
+        .AddPolicy("AnyAdmin", p => p.RequireClaim(RoleClaim,
+            "SuperAdmin", "IdentityReviewer", "MinistryManager", "Auditor", "Support"));
 
     // ── HTTP Resilience (for ministry calls) ──────────────────────────────────────────────────
     builder.Services.AddHttpClient("MinistryClient")
         .AddStandardResilienceHandler();
+
+    // ── Outbox dispatcher (T-EVT-1) — Hangfire is registered by AddAdminModule above ──────────
+    builder.Services.AddScoped<OutboxDispatcherJob>();
 
     // ── Build ─────────────────────────────────────────────────────────────────────────────────
     var app = builder.Build();
@@ -188,6 +226,8 @@ try
         options.EnableTryItOutByDefault();
     });
 
+    app.UseRateLimiter();  // T-SEC-2 — before auth, so a flooded caller never reaches OpenIddict
+
     app.UseAuthentication();
     app.UseAuthorization();
 
@@ -207,6 +247,13 @@ try
     app.MapAuditEndpoints();           // /api/audit/...
     app.MapAdminEndpoints();           // /api/admin/...
     app.UseAdminModule();              // Hangfire dashboard + recurring jobs
+
+    // Outbox dispatcher (T-EVT-1): one recurring job, deduplicated by id across restarts, that
+    // internally polls every 5s for the rest of each minute — see OutboxDispatcherJob for why.
+    RecurringJob.AddOrUpdate<OutboxDispatcherJob>(
+        "outbox-dispatcher",
+        job => job.DispatchAsync(CancellationToken.None),
+        Cron.Minutely());
 
     // ── Run all module EF Core migrations + seed data on startup ────────────────────────────────
     // Wrapped so a transient DB outage does not prevent the API from serving Swagger/endpoints.

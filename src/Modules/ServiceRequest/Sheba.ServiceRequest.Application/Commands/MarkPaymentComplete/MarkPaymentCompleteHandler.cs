@@ -25,6 +25,11 @@ public sealed class MarkPaymentCompleteHandler(
         var order = await paymentRepo.GetByIdAsync(command.PaymentOrderId, ct)
             ?? throw new NotFoundException("PaymentOrder", command.PaymentOrderId);
 
+        // NotFoundException (not Forbidden) for a non-owner — consistent with the rest of the
+        // codebase's anti-enumeration posture: don't confirm another citizen's order exists.
+        if (!command.IsAdmin && order.CitizenId != command.ActorId)
+            throw new NotFoundException("PaymentOrder", command.PaymentOrderId);
+
         if (order.Status == Payment.Domain.Enums.PaymentStatus.Completed)
             return new MarkPaymentCompleteResponse(order.ServiceRequestId, "Payment already completed.");
 

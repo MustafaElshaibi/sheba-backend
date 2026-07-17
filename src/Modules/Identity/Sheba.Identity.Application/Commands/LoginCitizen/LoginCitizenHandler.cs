@@ -3,19 +3,24 @@ using Microsoft.Extensions.Logging;
 using Sheba.Identity.Application.Interfaces;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Identity.Domain.Interfaces;
-using Sheba.Shared.Kernel.Exceptions;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.LoginCitizen;
 
 /// <summary>
-/// Handles login credential validation + OTP dispatch:
+/// Handles login credential validation + OTP dispatch. The ordering here is deliberate and
+/// security-critical (see §6.3 / STRIDE): the password is verified *before* anything
+/// account-specific is disclosed, so an outsider who lacks the password cannot use the
+/// response to learn whether an identifier exists or what state that account is in.
+///
 /// 1. Look up account by NID or username
-/// 2. Verify account is Approved (return specific, safe messages for other statuses)
-/// 3. Verify not locked (failed_login_count ≥ 5 → lock with exponential backoff)
-/// 4. Verify password (Argon2id via IPasswordHasher)
-/// 5. Invalidate old LOGIN OTPs, send fresh OTP
-/// 6. Return masked phone so the frontend shows "Enter OTP sent to ***456"
+/// 2. Unknown account → burn comparable Argon2id time, then fail generically (no timing oracle)
+/// 3. Locked account → fail generically *before* checking the password (brute-force gate)
+/// 4. Verify password (Argon2id); on failure record the attempt and fail generically
+/// 5. Only now, with ownership proven, apply the Approved-status gate (BR-ON-10) — a status
+///    message here reaches only a caller who already holds the password, so it is not a leak
+/// 6. Invalidate old LOGIN OTPs, send fresh OTP; return masked phone for the UI
 /// </summary>
 public sealed class LoginCitizenHandler(
     IIdentityRepository repository,
@@ -23,11 +28,21 @@ public sealed class LoginCitizenHandler(
     IPasswordHasher passwordHasher,
     IOtpHasher otpHasher,
     ILogger<LoginCitizenHandler> logger
-) : IRequestHandler<LoginCitizenCommand, LoginCitizenResponse>
+) : IRequestHandler<LoginCitizenCommand, Result<LoginCitizenResponse>>
 {
-    private const int MaxFailedAttempts = 5;
+    // One identical message for every "you don't get in" outcome that an unauthenticated
+    // caller can reach: unknown identifier, wrong password, or locked account. Keeping them
+    // byte-identical is what prevents login from becoming an account-existence oracle.
+    private const string GenericCredentialError =
+        "Invalid credentials. Please check your National ID/username and password.";
 
-    public async Task<LoginCitizenResponse> Handle(
+    // A valid Argon2id hash of a throwaway value, computed once and reused. When the account
+    // doesn't exist we still run a verification against it so the response latency matches the
+    // real-account path — otherwise the (expensive) Argon2id step would only run for existing
+    // accounts and its absence would time-leak which identifiers are real.
+    private static string? _dummyHash;
+
+    public async Task<Result<LoginCitizenResponse>> Handle(
         LoginCitizenCommand request,
         CancellationToken cancellationToken)
     {
@@ -35,42 +50,26 @@ public sealed class LoginCitizenHandler(
         var account = await repository.FindAccountByUsernameOrNidAsync(
             request.UsernameOrNid, cancellationToken);
 
-        // Generic error — do not reveal whether the account exists
+        // ── Step 2: Unknown account — equalize timing, then generic failure ────
         if (account is null)
         {
+            var dummy = _dummyHash ??= passwordHasher.Hash("sheba-login-timing-equalizer");
+            _ = passwordHasher.Verify(request.Password, dummy); // constant-ish work; result ignored
             logger.LogWarning("[LoginCitizen] Account not found: {Input}", MaskInput(request.UsernameOrNid));
-            return Fail("Invalid credentials. Please check your National ID/username and password.");
+            return Fail(GenericCredentialError);
         }
 
-        // ── Step 2: Status check ──────────────────────────────────────────────
-        var statusMessage = account.Status switch
-        {
-            AccountStatus.PendingVerification       => "Your phone number is not yet verified. Please complete registration.",
-            AccountStatus.PendingEmailVerification  => "Your email is not yet verified. Please click the link we sent.",
-            AccountStatus.PendingAdminApproval      => "Your account is pending admin approval. You will be notified by email.",
-            AccountStatus.Rejected                  => "Your account was not approved. Please contact support.",
-            AccountStatus.Suspended                 => "Your account is suspended. Please contact support.",
-            AccountStatus.Deactivated               => "This account has been deactivated.",
-            AccountStatus.Approved                  => null, // OK to proceed
-            _                                       => "Account status is invalid. Please contact support."
-        };
-
-        if (statusMessage is not null)
-        {
-            return Fail(statusMessage);
-        }
-
-        // ── Step 3: Lock check ────────────────────────────────────────────────
+        // ── Step 3: Lock gate — before password, generic message ──────────────
+        // Short-circuit locked accounts up front so a locked-out attacker cannot keep probing
+        // passwords. The message stays generic so "locked" never confirms the account exists.
         if (account.IsLocked())
         {
-            var lockedUntil = account.LockedUntil!.Value;
-            return Fail($"Account is temporarily locked due to too many failed attempts. Try again after {lockedUntil:HH:mm UTC}.");
+            logger.LogWarning("[LoginCitizen] Locked-account login attempt: AccountId={AccountId}", account.Id);
+            return Fail(GenericCredentialError);
         }
 
         // ── Step 4: Password verification (Argon2id via IPasswordHasher) ────────
-        bool passwordValid = passwordHasher.Verify(request.Password, account.PasswordHash);
-
-        if (!passwordValid)
+        if (!passwordHasher.Verify(request.Password, account.PasswordHash))
         {
             account.RecordFailedLogin();
             await repository.SaveChangesAsync(cancellationToken);
@@ -79,10 +78,33 @@ public sealed class LoginCitizenHandler(
                 "[LoginCitizen] Invalid password for AccountId={AccountId}, FailedCount={Count}",
                 account.Id, account.FailedLoginCount);
 
-            return Fail("Invalid credentials. Please check your National ID/username and password.");
+            return Fail(GenericCredentialError);
         }
 
-        // ── Step 5: Invalidate old OTPs and send new one ──────────────────────
+        // ── Step 5: Status gate — only after ownership is proven (BR-ON-10) ─────
+        // The caller has demonstrated the password, so telling them *why* a non-Approved
+        // account can't sign in is helpful, not an enumeration leak.
+        var statusMessage = account.Status switch
+        {
+            AccountStatus.Approved                  => null, // OK to proceed
+            AccountStatus.PendingVerification       => "Your phone number is not yet verified. Please complete registration.",
+            AccountStatus.PendingEmailVerification  => "Your email is not yet verified. Please click the link we sent.",
+            AccountStatus.PendingAdminApproval      => "Your account is pending admin approval. You will be notified by email.",
+            AccountStatus.Rejected                  => "Your account was not approved. Please contact support.",
+            AccountStatus.Suspended                 => "Your account is suspended. Please contact support.",
+            AccountStatus.Deactivated               => "This account has been deactivated.",
+            _                                       => "Account status is invalid. Please contact support."
+        };
+
+        if (statusMessage is not null)
+        {
+            logger.LogInformation(
+                "[LoginCitizen] Login refused for non-approved AccountId={AccountId} Status={Status}",
+                account.Id, account.Status);
+            return Fail(statusMessage);
+        }
+
+        // ── Step 6: Invalidate old OTPs and send new one ──────────────────────
         await repository.InvalidatePreviousOtpsAsync(account.Id, OtpPurpose.Login, cancellationToken);
 
         var (otpResult, rawCode) = await otpProvider.SendAsync(
@@ -110,14 +132,13 @@ public sealed class LoginCitizenHandler(
 
         logger.LogInformation("[LoginCitizen] OTP dispatched for AccountId={AccountId}", account.Id);
 
-        return new LoginCitizenResponse(
-            OtpSent:    true,
+        return Result.Success(new LoginCitizenResponse(
             AccountId:  account.Id,
-            MaskedPhone: MaskPhone(account.PhoneNumber));
+            MaskedPhone: MaskPhone(account.PhoneNumber)));
     }
 
-    private static LoginCitizenResponse Fail(string reason) =>
-        new(OtpSent: false, AccountId: Guid.Empty, MaskedPhone: "", FailureReason: reason);
+    private static Result<LoginCitizenResponse> Fail(string reason) =>
+        Result.Failure<LoginCitizenResponse>(Error.Validation("credentials", reason));
 
     private static string MaskInput(string? input) =>
         !string.IsNullOrEmpty(input) && input.Length > 3 ? input[..3] + "***" : "***";

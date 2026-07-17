@@ -1,18 +1,17 @@
 using MediatR;
 using Sheba.Identity.Domain.Enums;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Queries.GetAccountById;
 
 /// <summary>
 /// Get a single account by its ID.
-/// Used by admin portal and OpenIddict userinfo endpoint.
 ///
 /// API: GET /api/admin/accounts/{id}
-///      GET /connect/userinfo (via OpenIddict)
-/// Auth: SUPER_ADMIN | IDENTITY_REVIEWER | self (for userinfo)
+/// Auth: SUPER_ADMIN | IDENTITY_REVIEWER
 /// </summary>
 public sealed record GetAccountByIdQuery(Guid AccountId)
-    : IRequest<AccountDetailDto?>;
+    : IRequest<Result<AccountDetailDto>>;
 
 public sealed record AccountDetailDto(
     Guid          Id,

@@ -9,6 +9,9 @@ using Sheba.Audit.Application.Interfaces;
 using Sheba.Audit.Application.Queries.GetAuditLog;
 using Sheba.Audit.Infrastructure.Persistence;
 using Sheba.Audit.Infrastructure.Repositories;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Audit.Infrastructure;
 
@@ -36,10 +39,16 @@ public static class AuditModule
                     npgsql.MigrationsHistoryTable("__ef_migrations", "audit");
                     npgsql.MigrationsAssembly(typeof(AuditModule).Assembly.FullName);
                 })
-            .UseSnakeCaseNamingConvention());
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(new OutboxSaveChangesInterceptor()));
+
+        // Expose as base DbContext so the startup migration runner discovers this context (T-DB-1).
+        services.AddScoped<DbContext>(sp => sp.GetRequiredService<AuditDbContext>());
 
         // ── Repository ───────────────────────────────────────────────────────
         services.AddScoped<IAuditRepository, AuditRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<AuditDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<AuditDbContext>>();
 
         return services;
     }
@@ -50,7 +59,8 @@ public static class AuditModule
     public static WebApplication MapAuditEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/admin/audit")
-            .WithTags("Audit");
+            .WithTags("Audit")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         group.MapGet("/", async (
             Guid? actorId,

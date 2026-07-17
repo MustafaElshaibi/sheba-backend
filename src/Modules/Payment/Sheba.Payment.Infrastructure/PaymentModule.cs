@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Sheba.Payment.Domain.Interfaces;
 using Sheba.Payment.Infrastructure.Persistence;
 using Sheba.Payment.Infrastructure.Persistence.Repositories;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
 
 namespace Sheba.Payment.Infrastructure;
 
@@ -22,10 +25,13 @@ public static class PaymentModule
                     npgsql.MigrationsAssembly(typeof(PaymentModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
 
         services.AddScoped<DbContext>(sp => sp.GetRequiredService<PaymentDbContext>());
         services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<PaymentDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<PaymentDbContext>>();
 
         return services;
     }

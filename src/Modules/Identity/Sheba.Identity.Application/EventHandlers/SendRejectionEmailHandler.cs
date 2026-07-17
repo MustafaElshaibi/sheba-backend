@@ -17,13 +17,21 @@ namespace Sheba.Identity.Application.EventHandlers;
 public sealed class SendRejectionEmailHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    IInboxGuard inboxGuard,
     ILogger<SendRejectionEmailHandler> logger
 ) : INotificationHandler<IdentityRequestDecidedEvent>
 {
+    private const string ConsumerName = nameof(SendRejectionEmailHandler);
+
     public async Task Handle(IdentityRequestDecidedEvent notification, CancellationToken cancellationToken)
     {
         // Only handle rejections
         if (notification.Approved)
+            return;
+
+        // Guarded by IInboxGuard (T-EVT-1): at-least-once outbox redelivery would otherwise
+        // resend this rejection email.
+        if (await inboxGuard.IsProcessedAsync(notification.EventId, ConsumerName, cancellationToken))
             return;
 
         var account = await repository.FindAccountByIdAsync(notification.AccountId, cancellationToken);
@@ -76,9 +84,12 @@ public sealed class SendRejectionEmailHandler(
             cancellationToken: cancellationToken);
 
         if (sent)
+        {
+            await inboxGuard.MarkProcessedAsync(notification.EventId, ConsumerName, cancellationToken);
             logger.LogInformation(
                 "[SendRejectionEmail] Rejection email sent to {Email} (AccountId={AccountId}, RequestId={RequestId})",
                 account.Email, notification.AccountId, notification.RequestId);
+        }
         else
             logger.LogError(
                 "[SendRejectionEmail] Failed to send rejection email to {Email} (AccountId={AccountId})",

@@ -8,11 +8,7 @@
 
 | ID | Gap | Impact | Where |
 |----|-----|--------|-------|
-| T-API-1 | No JSend envelopes — endpoints return raw DTOs; errors are RFC 7807 ProblemDetails | API consumers get inconsistent shapes vs. the contract in [api-contract.md](api-contract.md) | `Sheba.Api/Middleware/ExceptionHandlerMiddleware.cs`, all module endpoint groups |
-| T-EVT-1 | Outbox is a dead entity: exists only in Identity, **no dispatcher drains it**; events dispatch in-process at SaveChanges with no durability | Crash between commit and publish silently loses events (e.g. approval email/VC issuance) | `Identity.Domain/Entities/OutboxMessage.cs`; no consumer inbox anywhere |
-| T-DB-1 | Only Identity has EF migrations; 9 contexts rely on `EnsureCreated()` fallback | Schema drift; no upgrade path once real data exists | `Sheba.Api/Extensions/MigrationExtensions.cs` |
 | T-SEC-1 | Admin TOTP modeled (`mfa_secret`) but not enforced at login | Admin accounts are password-only | Identity module |
-| T-SEC-2 | No rate limiting anywhere (no `AddRateLimiter`) | OTP flooding, credential stuffing, enumeration pressure | `Sheba.Api/Program.cs` |
 | T-SEC-3 | Secrets via config/env; AES vault key has a derived dev fallback; dev signing certs even on production branch | Key compromise + no rotation story in practice | `IdentityModule.cs`, `AesGcmCredentialEncryptor.cs` |
 | T-SEC-4 | No signing-cert rotation procedure wired | JWKS rollover untested | Identity module |
 | T-SEC-6/7 | No DB-volume/column encryption for `form_data_json`; MinIO SSE off (T-DOC-2) | PII at rest relies on host security only | Postgres/MinIO deployment |
@@ -21,13 +17,11 @@
 | T-PAY-1 | Payment Application layer is **empty** (entities + repo only; mock flow) | No real order/refund lifecycle; workflow coupled via direct command instead of `PaymentCompletedEvent` | `Modules/Payment` |
 | T-AUD-1..3 | Audit is a plain table: no INSERT-only grant, no hash chain, no partitioning | "Tamper-evident" is aspirational today | `Modules/Audit` |
 | T-AUTH-1 | Ministry-Admin per-ministry scoping only partially enforced | A MinistryManager could touch another ministry's data via some endpoints | Ministry/ServiceRequest admin endpoints |
-| T-STD-1 | No `Result<T>`; expected failures flow as exceptions | Works, but exception-as-control-flow on hot validation paths | Shared.Kernel |
 | T-NOT-1 | `Notification`/`NotificationTemplate` entities are TODO stubs; sends are hardcoded strings | No bilingual templating | `Modules/Notification` |
 | T-ADM-1 | No projection rebuild for the BI read model | Lost/buggy projection = manual SQL repair | `Modules/Admin` |
 | T-TST-1..4 | Only ~2 real test classes (Identity); Ministry/ServiceRequest/Integration projects are placeholders | Regression safety near zero outside Identity | `tests/` |
 | T-INT-1/2 | No OpenCRVS adapter; no OTP provider failover | Single-provider risk | Identity adapters |
-| — | Leftover `Class1.cs` stubs in Citizen module | Cosmetic | `Modules/Citizen` |
-| — | `TransactionBehavior` warns and proceeds without `IUnitOfWork` (none registered); only 2 commands marked `ITransactionalCommand` | Multi-write handlers aren't atomic with their outbox rows — folded into T-EVT-1 | `Sheba.Api/Behaviors` |
+| — | `EfUnitOfWork<T>` is now registered per module (T-EVT-1), but zero commands implement `ITransactionalCommand` yet | `TransactionBehavior` has a real `IUnitOfWork` to wrap with, but nothing opts in, so no handler runs inside an explicit transaction today | `Sheba.Api/Behaviors/TransactionBehavior.cs` |
 
 ## 2. Superseded decisions (do not resurrect)
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
+using OpenIddict.Validation.AspNetCore;
 using Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 using Sheba.Identity.Application.Commands.CompleteRegistration;
 using Sheba.Identity.Application.Commands.LoginCitizen;
@@ -28,6 +30,9 @@ using Sheba.Identity.Infrastructure.Persistence;
 using Sheba.Identity.Infrastructure.Persistence.Repositories;
 using Sheba.Identity.Infrastructure.Security;
 using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.RateLimiting;
+using Sheba.Shared.Kernel.Results;
+using Sheba.Shared.Kernel.Security;
 
 namespace Sheba.Identity.Infrastructure;
 
@@ -64,6 +69,11 @@ public static class IdentityModule
             // Identity migration creates both the identity tables and the
             // OpenIddict application/authorization/scope/token tables.
             options.UseOpenIddict();
+
+            // Outbox interceptor (T-EVT-1): converts raised domain events into outbox_messages
+            // rows in the same SaveChanges call as the aggregate write. Stateless — one shared
+            // instance is safe across the DbContext pool.
+            options.AddInterceptors(new Sheba.Shared.Kernel.Outbox.OutboxSaveChangesInterceptor());
         });
 
         // Expose IdentityDbContext as the base DbContext type as well, so the
@@ -98,6 +108,10 @@ public static class IdentityModule
 
         // ── 5. Repository (IIdentityRepository → IdentityRepository) ──────────
         services.AddScoped<IIdentityRepository, IdentityRepository>();
+
+        // ── 5a. Unit of work + inbox guard (T-EVT-1) ───────────────────────────
+        services.AddScoped<IUnitOfWork, Sheba.Shared.Kernel.Persistence.EfUnitOfWork<IdentityDbContext>>();
+        services.AddScoped<IInboxGuard, Sheba.Shared.Kernel.Persistence.EfInboxGuard<IdentityDbContext>>();
 
         // ── 5b. Password hasher (IPasswordHasher → Argon2idPasswordHasher) ─────
         services.AddScoped<IPasswordHasher, Argon2idPasswordHasher>();
@@ -143,8 +157,9 @@ public static class IdentityModule
                     .AllowClientCredentialsFlow()
                     .AllowRefreshTokenFlow();
 
-                // Custom NID+OTP grant type
+                // Custom grant types: citizen NID+OTP login, admin password login
                 server.AllowCustomFlow("urn:sheba:grant:national_id_otp");
+                server.AllowCustomFlow(Oidc.OidcEndpoints.ShebaAdminGrantType);
 
                 // Scopes
                 server.RegisterScopes(
@@ -199,6 +214,16 @@ public static class IdentityModule
                 validation.UseAspNetCore();
             });
 
+        // Make OpenIddict validation the default authN/challenge scheme. Without this,
+        // RequireAuthorization on any endpoint throws "No authenticationScheme was specified"
+        // (500) instead of challenging with a 401 the moment an anonymous caller shows up.
+        services.AddAuthentication(options =>
+        {
+            options.DefaultScheme          = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+        });
+
         return services;
     }
 
@@ -211,14 +236,18 @@ public static class IdentityModule
     public static WebApplication MapIdentityEndpoints(this WebApplication app)
     {
         // ── Citizen registration + login (public) ────────────────────────────
-        var citizen = app.MapGroup("/api/identity").WithTags("Identity");
+        // AllowAnonymous is correct here, not an oversight: these ARE the pre-authentication
+        // flows — a caller has no token yet because getting one is the point of this group.
+        var citizen = app.MapGroup("/api/identity").WithTags("Identity").AllowAnonymous()
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         citizen.MapPost("/register", async (
             RegisterCitizenCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return Results.Ok(result);
+            return result.ToHttpResult();
         })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityRegister) // T-SEC-2
         .WithName("RegisterCitizen")
         .WithSummary("Step 1: validate NID + phone, create pending account, send OTP.");
 
@@ -226,8 +255,9 @@ public static class IdentityModule
             VerifyOtpCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return result.Succeeded ? Results.Ok(result) : Results.BadRequest(result);
+            return result.ToHttpResult();
         })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityOtp) // T-SEC-2
         .WithName("VerifyOtp")
         .WithSummary("Step 2: verify the OTP sent to the citizen's phone.");
 
@@ -235,7 +265,7 @@ public static class IdentityModule
             CompleteRegistrationCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return Results.Ok(result);
+            return result.ToHttpResult();
         })
         .WithName("CompleteRegistration")
         .WithSummary("Step 3: set username, email, password; an email verification link is sent.");
@@ -244,7 +274,7 @@ public static class IdentityModule
             VerifyEmailCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return result.Succeeded ? Results.Ok(result) : Results.BadRequest(result);
+            return result.ToHttpResult();
         })
         .WithName("VerifyEmail")
         .WithSummary("Step 4: verify the email link sent after completing registration.");
@@ -253,8 +283,9 @@ public static class IdentityModule
             LoginCitizenCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return result.OtpSent ? Results.Ok(result) : Results.BadRequest(result);
+            return result.ToHttpResult();
         })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityLogin) // T-SEC-2
         .WithName("LoginCitizen")
         .WithSummary("Login step 1: validate credentials and dispatch a login OTP.");
 
@@ -262,22 +293,35 @@ public static class IdentityModule
             VerifyLoginOtpCommand command, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(command, ct);
-            return result.Succeeded ? Results.Ok(result) : Results.BadRequest(result);
+            return result.ToHttpResult();
         })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityOtp) // T-SEC-2
         .WithName("VerifyLoginOtp")
         .WithSummary("Login step 2: verify the login OTP. Token issuance happens via /connect/token.");
 
-        citizen.MapPost("/loa/upgrade", async (
-            RequestLoaUpgradeCommand command, IMediator mediator, CancellationToken ct) =>
+        // LoA upgrade is a citizen action on their OWN account, so it needs a real principal —
+        // separate group so it can require auth while the rest of `citizen` stays anonymous.
+        var citizenAuthed = app.MapGroup("/api/identity").WithTags("Identity").RequireAuthorization("CitizenOnly")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        citizenAuthed.MapPost("/loa/upgrade", async (
+            LoaUpgradeBody body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
+            // AccountId comes from the verified token, never the body — a citizen requesting an
+            // upgrade for someone else's account is exactly the caller-supplied-identity bug
+            // this endpoint used to have.
+            var command = new RequestLoaUpgradeCommand(user.RequireSubjectId(), body.TargetLevel);
             var result = await mediator.Send(command, ct);
-            return Results.Ok(result);
+            return result.ToHttpResult();
         })
         .WithName("RequestLoaUpgrade")
-        .WithSummary("Request a Level-of-Assurance upgrade (LoA 2/3) — enters the admin review queue.");
+        .WithSummary("Request a Level-of-Assurance upgrade (LoA 2/3) for your own account — enters the admin review queue.");
 
         // ── Admin identity-request review queue ───────────────────────────────
-        var admin = app.MapGroup("/api/admin/identity-requests").WithTags("Admin — Identity Requests");
+        var admin = app.MapGroup("/api/admin/identity-requests")
+            .WithTags("Admin — Identity Requests")
+            .RequireAuthorization("IdentityReviewer")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         admin.MapGet("/", async (
             IMediator mediator,
@@ -289,7 +333,7 @@ public static class IdentityModule
             var result = await mediator.Send(
                 new GetIdentityRequestsQuery(status, page <= 0 ? 1 : page, pageSize <= 0 ? 20 : pageSize),
                 ct);
-            return Results.Ok(result);
+            return result.ToHttpResult();
         })
         .WithName("GetIdentityRequests")
         .WithSummary("List identity requests (admin review queue).");
@@ -297,12 +341,15 @@ public static class IdentityModule
         admin.MapPost("/{requestId:guid}/approve", async (
             Guid requestId,
             ApproveIdentityRequestBody body,
+            ClaimsPrincipal user,
             IMediator mediator,
             CancellationToken ct) =>
         {
+            // Reviewer identity comes from the admin's own token (sub), never a body field —
+            // otherwise any reviewer could attribute their decision to a different admin.
             var result = await mediator.Send(
-                new ApproveIdentityRequestCommand(requestId, body.ReviewedByAdminId, body.Notes), ct);
-            return Results.Ok(result);
+                new ApproveIdentityRequestCommand(requestId, user.RequireSubjectId(), body.Notes), ct);
+            return result.ToHttpResult();
         })
         .WithName("ApproveIdentityRequest")
         .WithSummary("Approve an identity request — activates the citizen account.");
@@ -310,12 +357,13 @@ public static class IdentityModule
         admin.MapPost("/{requestId:guid}/reject", async (
             Guid requestId,
             RejectIdentityRequestBody body,
+            ClaimsPrincipal user,
             IMediator mediator,
             CancellationToken ct) =>
         {
             var result = await mediator.Send(
-                new RejectIdentityRequestCommand(requestId, body.ReviewedByAdminId, body.RejectionReason, body.Notes), ct);
-            return Results.Ok(result);
+                new RejectIdentityRequestCommand(requestId, user.RequireSubjectId(), body.RejectionReason, body.Notes), ct);
+            return result.ToHttpResult();
         })
         .WithName("RejectIdentityRequest")
         .WithSummary("Reject an identity request with a reason.");
@@ -325,20 +373,25 @@ public static class IdentityModule
             Guid id, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetAccountByIdQuery(id), ct);
-            return result is null ? Results.NotFound() : Results.Ok(result);
+            return result.ToHttpResult();
         })
         .WithTags("Admin — Accounts")
+        .RequireAuthorization("IdentityReviewer")
+        .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>() // JSend envelopes (T-API-1)
         .WithName("GetAccountById")
         .WithSummary("Get a citizen account by ID.");
 
         return app;
     }
 
-    /// <summary>Request body for the approve endpoint.</summary>
-    public sealed record ApproveIdentityRequestBody(Guid ReviewedByAdminId, string? Notes = null);
+    /// <summary>Request body for the LoA upgrade endpoint — AccountId is never client-supplied.</summary>
+    public sealed record LoaUpgradeBody(int TargetLevel);
 
-    /// <summary>Request body for the reject endpoint.</summary>
-    public sealed record RejectIdentityRequestBody(Guid ReviewedByAdminId, string RejectionReason, string? Notes = null);
+    /// <summary>Request body for the approve endpoint — the reviewer id comes from the token.</summary>
+    public sealed record ApproveIdentityRequestBody(string? Notes = null);
+
+    /// <summary>Request body for the reject endpoint — the reviewer id comes from the token.</summary>
+    public sealed record RejectIdentityRequestBody(string RejectionReason, string? Notes = null);
 
     /// <summary>
     /// Seeds OpenIddict applications and the mock citizen registry.
@@ -374,7 +427,8 @@ public static class IdentityModule
             redirectUri: "https://localhost:4300/callback",
             postLogoutUri: "https://localhost:4300",
             scopes: new[] { "openid", "profile", "admin_api" },
-            clientSecret: "sheba-admin-dev-secret");
+            clientSecret: "sheba-admin-dev-secret",
+            allowAdminPasswordGrant: true);
 
         await SeedMachineClientAsync(
             manager, logger,
@@ -397,7 +451,8 @@ public static class IdentityModule
         string redirectUri,
         string postLogoutUri,
         string[] scopes,
-        string? clientSecret = null)
+        string? clientSecret = null,
+        bool allowAdminPasswordGrant = false)
     {
         if (await manager.FindByClientIdAsync(clientId) is not null)
         {
@@ -431,6 +486,11 @@ public static class IdentityModule
         if (string.Equals(type, OpenIddictConstants.ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
             descriptor.Permissions.Add(
                 OpenIddictConstants.Permissions.Prefixes.GrantType + "urn:sheba:grant:national_id_otp");
+
+        // Admin clients (e.g. sheba-admin) may use the custom admin password grant.
+        if (allowAdminPasswordGrant)
+            descriptor.Permissions.Add(
+                OpenIddictConstants.Permissions.Prefixes.GrantType + Oidc.OidcEndpoints.ShebaAdminGrantType);
 
         foreach (var scope in scopes)
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);

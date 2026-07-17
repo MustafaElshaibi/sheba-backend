@@ -40,29 +40,14 @@ public static class MigrationExtensions
             var contextName = context.GetType().Name;
             try
             {
-                // Some modules ship EF Core migrations; others (still early in the
-                // graduation build) do not. Use migrations when they exist, and fall
-                // back to EnsureCreated so every module's schema is provisioned and
-                // the app can start + seed without a missing-table crash.
-                var hasMigrations = context.Database.GetMigrations().Any();
-
-                if (hasMigrations)
-                {
-                    logger.LogInformation("[Migration] Migrating {DbContext}...", contextName);
-                    await context.Database.MigrateAsync();
-                    logger.LogInformation("[Migration] {DbContext} migrated successfully.", contextName);
-                }
-                else
-                {
-                    logger.LogInformation(
-                        "[Migration] {DbContext} has no migrations — ensuring schema via EnsureCreated.",
-                        contextName);
-                    // EnsureCreatedAsync creates the schema/tables for THIS context's model only.
-                    // It is a no-op if the tables already exist. Safe because every module uses a
-                    // distinct PostgreSQL schema (identity / ministry / service_req / payment / ...).
-                    await context.Database.EnsureCreatedAsync();
-                    logger.LogInformation("[Migration] {DbContext} schema ensured.", contextName);
-                }
+                // Migrations are the only schema-change mechanism (T-DB-1). The old
+                // EnsureCreated fallback is gone: it could not evolve a schema, and it silently
+                // no-ops once the database contains ANY table (e.g. Hangfire's), leaving module
+                // schemas unprovisioned. A context without migrations is now a build defect —
+                // MigrateAsync will simply apply nothing and seeding will fail loudly.
+                logger.LogInformation("[Migration] Migrating {DbContext}...", contextName);
+                await context.Database.MigrateAsync();
+                logger.LogInformation("[Migration] {DbContext} migrated successfully.", contextName);
             }
             catch (Exception ex)
             {

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Sheba.ServiceRequest.Domain.Entities;
+using Sheba.Shared.Kernel.Outbox;
 
 namespace Sheba.ServiceRequest.Infrastructure.Persistence;
 
@@ -14,11 +15,15 @@ public sealed class ServiceRequestDbContext(DbContextOptions<ServiceRequestDbCon
     public DbSet<ServiceWorkflowStep> WorkflowSteps => Set<ServiceWorkflowStep>();
     public DbSet<ServiceRequestEntity> ServiceRequests => Set<ServiceRequestEntity>();
     public DbSet<RequestStepExecution> StepExecutions => Set<RequestStepExecution>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("service_req");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceRequestDbContext).Assembly);
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
+        modelBuilder.ApplyConfiguration(new InboxMessageConfiguration());
         base.OnModelCreating(modelBuilder);
     }
 }

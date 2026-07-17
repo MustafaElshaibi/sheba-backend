@@ -25,7 +25,11 @@ public static class RelyingPartyEndpoints
 {
     public static WebApplication MapRelyingPartyEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/admin/relying-parties").WithTags("Admin — Relying Parties");
+        // BR-RP-1: only System Admin registers relying parties.
+        var group = app.MapGroup("/api/admin/relying-parties")
+            .WithTags("Admin — Relying Parties")
+            .RequireAuthorization("SuperAdminOnly")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── List ─────────────────────────────────────────────────────────────
         group.MapGet("/", async (IOpenIddictApplicationManager manager, CancellationToken ct) =>

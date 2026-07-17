@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.CompleteRegistration;
 
@@ -15,7 +16,7 @@ public sealed record CompleteRegistrationCommand(
     string Email,
     string Password,
     string ConfirmPassword
-) : IRequest<CompleteRegistrationResponse>;
+) : IRequest<Result<CompleteRegistrationResponse>>;
 
 public sealed record CompleteRegistrationResponse(
     Guid AccountId,

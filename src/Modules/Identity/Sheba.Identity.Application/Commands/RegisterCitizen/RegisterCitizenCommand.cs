@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.RegisterCitizen;
 
@@ -14,7 +15,7 @@ namespace Sheba.Identity.Application.Commands.RegisterCitizen;
 public sealed record RegisterCitizenCommand(
     string NationalId,
     string PhoneNumber
-) : IRequest<RegisterCitizenResponse>;
+) : IRequest<Result<RegisterCitizenResponse>>;
 
 public sealed record RegisterCitizenResponse(
     Guid AccountId,

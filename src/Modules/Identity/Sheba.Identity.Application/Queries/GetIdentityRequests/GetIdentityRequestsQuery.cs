@@ -1,5 +1,6 @@
 using MediatR;
 using Sheba.Identity.Domain.Enums;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Queries.GetIdentityRequests;
 
@@ -13,7 +14,7 @@ public sealed record GetIdentityRequestsQuery(
     RequestStatus? Status    = null,
     int            Page      = 1,
     int            PageSize  = 20
-) : IRequest<GetIdentityRequestsResponse>;
+) : IRequest<Result<GetIdentityRequestsResponse>>;
 
 public sealed record IdentityRequestSummary(
     Guid          RequestId,

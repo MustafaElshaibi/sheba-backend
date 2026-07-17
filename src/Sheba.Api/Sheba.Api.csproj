@@ -9,9 +9,16 @@
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Http" />
     <PackageReference Include="FluentValidation.AspNetCore" />
+    <!-- Outbox dispatcher (T-EVT-1) uses Hangfire's RecurringJob/IBackgroundJobClient directly. -->
+    <PackageReference Include="Hangfire.Core" />
     <PackageReference Include="Mapster" />
     <PackageReference Include="MediatR" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!-- Startup project for `dotnet ef` — lets migrations be generated for every module context
+         without adding Design to each module (T-DB-1). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Serilog.AspNetCore" />

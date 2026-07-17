@@ -3,7 +3,12 @@ using Sheba.ServiceRequest.Domain.Enums;
 
 namespace Sheba.ServiceRequest.Application.Queries.GetRequestById;
 
-public sealed record GetRequestByIdQuery(Guid RequestId) : IRequest<RequestDetailDto?>;
+/// <summary>
+/// A citizen may only fetch their own request; an admin may fetch any. The handler enforces
+/// this — see the ownership check in GetRequestByIdHandler — rather than the endpoint, since
+/// "own it or be an admin" needs the resource loaded first to compare.
+/// </summary>
+public sealed record GetRequestByIdQuery(Guid RequestId, Guid ActorId, bool IsAdmin) : IRequest<RequestDetailDto?>;
 
 public sealed record RequestDetailDto(
     Guid Id, string ReferenceNumber, Guid ServiceId, Guid CitizenId,

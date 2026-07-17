@@ -12,6 +12,10 @@ using Sheba.Document.Domain.Interfaces;
 using Sheba.Document.Infrastructure.Persistence;
 using Sheba.Document.Infrastructure.Persistence.Repositories;
 using Sheba.Document.Infrastructure.Storage;
+using Sheba.Shared.Kernel.Interfaces;
+using Sheba.Shared.Kernel.Outbox;
+using Sheba.Shared.Kernel.Persistence;
+using Sheba.Shared.Kernel.Security;
 
 namespace Sheba.Document.Infrastructure;
 
@@ -29,18 +33,22 @@ public static class DocumentModule
                     npgsql.MigrationsAssembly(typeof(DocumentModule).Assembly.FullName);
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3);
                 });
+            options.AddInterceptors(new OutboxSaveChangesInterceptor());
         });
 
         services.AddScoped<DbContext>(sp => sp.GetRequiredService<DocumentDbContext>());
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddSingleton<IFileStorage, MinioFileStorage>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork<DocumentDbContext>>();
+        services.AddScoped<IInboxGuard, EfInboxGuard<DocumentDbContext>>();
 
         return services;
     }
 
     public static WebApplication MapDocumentEndpoints(this WebApplication app)
     {
-        var docs = app.MapGroup("/api/documents").WithTags("Documents");
+        var docs = app.MapGroup("/api/documents").WithTags("Documents")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
 
         // ── Upload (multipart/form-data) ──────────────────────────────────────
         docs.MapPost("/", async (
@@ -67,11 +75,16 @@ public static class DocumentModule
 
         // ── Presigned download URL ────────────────────────────────────────────
         docs.MapGet("/{id:guid}/download-url", async (
-            Guid id, IMediator mediator, CancellationToken ct) =>
+            Guid id, System.Security.Claims.ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetDocumentDownloadUrlQuery(id), ct);
+            // Actor identity comes from the token — the handler enforces BR-DO-1 (owners only,
+            // unless admin) and returns null for non-owners so document existence never leaks.
+            var isAdmin = user.GetRole() != "Citizen";
+            var result = await mediator.Send(
+                new GetDocumentDownloadUrlQuery(id, user.RequireSubjectId(), isAdmin), ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
+        .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
         .WithName("GetDocumentDownloadUrl")
         .WithSummary("Generate a presigned MinIO download URL (valid 15 minutes).");
 

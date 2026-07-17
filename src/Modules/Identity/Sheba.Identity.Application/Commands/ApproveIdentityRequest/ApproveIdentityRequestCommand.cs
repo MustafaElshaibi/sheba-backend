@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 
@@ -12,7 +13,7 @@ public sealed record ApproveIdentityRequestCommand(
     Guid RequestId,
     Guid ReviewedByAdminId,
     string? Notes = null
-) : IRequest<ApproveIdentityRequestResponse>;
+) : IRequest<Result<ApproveIdentityRequestResponse>>;
 
 public sealed record ApproveIdentityRequestResponse(
     Guid RequestId,

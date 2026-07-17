@@ -1,4 +1,5 @@
 using MediatR;
+using Sheba.Shared.Kernel.Results;
 
 namespace Sheba.Identity.Application.Commands.VerifyOtp;
 
@@ -12,11 +13,7 @@ namespace Sheba.Identity.Application.Commands.VerifyOtp;
 public sealed record VerifyOtpCommand(
     Guid   AccountId,
     string Otp
-) : IRequest<VerifyOtpResponse>;
+) : IRequest<Result<VerifyOtpResponse>>;
 
-/// <summary>
-/// Response for VerifyOtpCommand.
-/// Succeeded = true means OTP matched and phone is now verified.
-/// Message carries a user-facing description (success or failure reason).
-/// </summary>
-public sealed record VerifyOtpResponse(bool Succeeded, string? Message = null);
+/// <summary>Response for a successful VerifyOtpCommand — failures are carried by Result&lt;T&gt;.Error.</summary>
+public sealed record VerifyOtpResponse(string Message);

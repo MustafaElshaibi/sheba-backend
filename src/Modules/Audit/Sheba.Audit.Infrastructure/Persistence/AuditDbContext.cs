@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sheba.Audit.Domain.Entities;
+using Sheba.Shared.Kernel.Outbox;
 
 namespace Sheba.Audit.Infrastructure.Persistence;
 
@@ -11,12 +12,16 @@ namespace Sheba.Audit.Infrastructure.Persistence;
 public sealed class AuditDbContext : DbContext
 {
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     public AuditDbContext(DbContextOptions<AuditDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
         mb.HasDefaultSchema("audit");
+        mb.ApplyConfiguration(new OutboxMessageConfiguration());
+        mb.ApplyConfiguration(new InboxMessageConfiguration());
 
         mb.Entity<AuditEvent>(e =>
         {

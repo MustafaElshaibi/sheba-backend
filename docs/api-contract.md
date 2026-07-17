@@ -1,8 +1,9 @@
 # API Contract — REST Conventions, JSend Envelopes, Endpoint Catalog
 
 > Extract of [sheba.md](sheba.md) §9; sheba.md wins conflicts.
-> **Status:** target standard. Current code returns raw DTOs + RFC 7807 errors; the retrofit is
-> backlog **T-API-1** ([TASKS.md](../TASKS.md)) and is a mechanical single-switch change.
+> **Status:** implemented (T-API-1). The wrapper filter (`JSendWrappingFilter`) is registered on
+> every module route group; the exception middleware emits JSend `fail`/`error`; bare 401/403
+> challenges get JSend bodies; Swagger documents the envelope via an operation filter.
 
 ## 1. General conventions
 
@@ -90,7 +91,9 @@ Wiring:
    `ValidationException` → 400 `fail` (field dictionary), `NotFoundException` → 404 `fail`,
    `DomainException` → 422 `fail`, `UnauthorizedAccessException` → 403 `fail`, anything else →
    500 `error` with correlation id and **no stack trace**.
-3. **AuthN/authZ handlers** (`OnChallenge`/`OnForbidden`) write JSend `fail` bodies for 401/403.
+3. **Challenge bodies**: the same exception middleware rewrites bare 401/403 challenge responses
+   (emitted by the authN/authZ middleware) into JSend `fail` bodies — scheme-agnostic, so it
+   covers OpenIddict validation and policy failures alike.
 4. Swagger documents the envelope via a schema filter so RP developers see real shapes.
 
 Error `code` ranges (app-level, optional): `1xxx` identity, `2xxx` ministry integration,

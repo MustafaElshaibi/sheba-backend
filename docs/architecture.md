@@ -17,7 +17,8 @@ Sheba.sln
 ├── src/
 │   ├── Sheba.Api/                      # Host: Program.cs, middleware, MediatR pipeline behaviors
 │   ├── Sheba.Shared.Kernel/            # BaseEntity, IDomainEvent, exceptions, value objects,
-│   │                                   #   cross-module query ports, (target: JSend + Result + outbox primitives)
+│   │                                   #   cross-module query ports, JSend + outbox/inbox primitives
+│   │                                   #   (target: Result<T>, T-STD-1)
 │   └── Modules/<Name>/
 │       ├── Sheba.<Name>.Domain/        # Entities, enums, domain events, ports (interfaces)
 │       ├── Sheba.<Name>.Application/   # Commands, queries, handlers, validators, DTOs
@@ -61,15 +62,17 @@ Each `<Name>Module.cs` exposes two extension methods: `Add<Name>Module(IServiceC
 ## 4. Request pipeline
 
 ```
-HTTPS → ExceptionHandler (JSend error/fail) → Serilog request logging → RateLimiter [T-SEC-2]
+HTTPS → ExceptionHandler (JSend error/fail) → Serilog request logging → RateLimiter (T-SEC-2)
      → CORS → Authentication (OpenIddict) → Authorization (policies) → JSend result filter
      → Module endpoint group → MediatR:
         LoggingBehavior → ValidationBehavior → AuthorizationBehavior → Transaction+Outbox → Handler
 ```
 
-The Transaction behavior wraps commands marked `ITransactionalCommand` in an EF transaction and
-flushes raised domain events into the module's outbox table within that transaction (target design;
-see T-EVT-1 in [known-issues.md](known-issues.md)).
+The Transaction behavior wraps commands marked `ITransactionalCommand` in an EF transaction (a real
+`IUnitOfWork` per module now backs this, T-EVT-1 — though no command has adopted the marker yet). A
+`SaveChangesInterceptor` — not the Transaction behavior — flushes raised domain events into the
+module's outbox table on every `SaveChanges` call, transaction or not; see
+[sheba.md §11.1](sheba.md#111-transactional-outbox-the-reliability-backbone).
 
 ## 5. Module communication picture
 
