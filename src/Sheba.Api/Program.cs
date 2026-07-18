@@ -82,6 +82,7 @@ try
             typeof(AuditModule).Assembly,
             typeof(AdminModule).Assembly,
             // Application assemblies (commands, queries, event handlers)
+            typeof(Sheba.Citizen.Application.Commands.UpdateProfile.UpdateProfileCommand).Assembly,
             typeof(Sheba.Ministry.Application.Commands.CreateMinistry.CreateMinistryCommand).Assembly,
             typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
             typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,
@@ -118,6 +119,7 @@ try
         typeof(AdminModule).Assembly,
         // Application assemblies (where the validators actually are)
         typeof(Sheba.Identity.Application.Commands.RegisterCitizen.RegisterCitizenValidator).Assembly,
+        typeof(Sheba.Citizen.Application.Commands.UpdateProfile.UpdateProfileValidator).Assembly,
         typeof(Sheba.Ministry.Application.Commands.CreateMinistry.CreateMinistryCommand).Assembly,
         typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
         typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,

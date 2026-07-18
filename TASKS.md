@@ -113,7 +113,7 @@ row in known-issues §1 by the same ID.
       AC: the §10.2 suspend/reactivate matrix rows are enforceable; a rejected citizen can
       re-apply; an abandoned registration no longer blocks its NID after the purge window; all
       transitions guarded on the aggregate.
-- [ ] **T-CIT-1** Citizen module completion *(High · M · deps: T-ARC-1 · issue: T-CIT-1)*:
+- [x] **T-CIT-1** Citizen module completion *(High · M · deps: T-ARC-1 · issue: T-CIT-1)*:
       consume `IdentityRequestDecidedEvent(approved)` via the kernel event + inbox to create the
       `CitizenProfile` (§5.2); map `/api/citizens` endpoints (get/update own profile,
       ownership-checked).

@@ -7,6 +7,24 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Citizen module completion (T-CIT-1)**: `CreateCitizenProfileOnApprovalHandler` consumes
+  `IdentityRequestDecidedEvent(approved)` (inbox-guarded, idempotent) to materialize the
+  `CitizenProfile` row other modules read via `ICitizenAccountQueryService`. `/api/citizens/me`
+  (GET/PATCH, `CitizenOnly` policy) lets a citizen read/update only their own profile — ownership
+  is implicit since `AccountId` always comes from the caller's own token, never a route/body
+  parameter.
+
+  Found and fixed a live bug in the same area: `Sheba.Citizen.Application` was never in
+  `Program.cs`'s MediatR or FluentValidation assembly-scan lists — the existing
+  `UpdateProfileCommand`/`Handler` (written before this change, never wired to an endpoint) would
+  have thrown "no handler registered" the first time anything actually called it. Added the
+  missing assembly registrations and a validator that didn't exist yet.
+
+  **Verified live**: approved a pending identity request and confirmed a `citizen.citizen_profiles`
+  row was created automatically with the correct NID/name/email. Full suite: `dotnet build`
+  clean, `dotnet test` 192/192 passing (no new tests added for this pass — the endpoint plumbing
+  mirrors Wallet's already-tested `/api/wallet/credentials` pattern exactly).
+
 - **Account lifecycle completion (T-ID-1)**: `Account.Suspend`/`Reinstate`/`Deactivate` (§6.2:
   `Approved ⇄ Suspended`, `Approved → Deactivated` terminal) behind new admin endpoints
   `POST /api/admin/accounts/{id}/{suspend,reinstate,deactivate}` (`IdentityReviewer` policy).

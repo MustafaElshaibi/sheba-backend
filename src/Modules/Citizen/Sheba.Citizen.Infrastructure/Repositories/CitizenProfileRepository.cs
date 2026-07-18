@@ -16,6 +16,9 @@ public sealed class CitizenProfileRepository(CitizenDbContext db) : ICitizenProf
             .FirstOrDefaultAsync(p => p.AccountId == accountId, ct);
     }
 
+    public async Task AddAsync(CitizenProfile profile, CancellationToken ct = default)
+        => await db.CitizenProfiles.AddAsync(profile, ct);
+
     public async Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         return await db.SaveChangesAsync(ct);
