@@ -1,0 +1,33 @@
+meta {
+  name: Token - Refresh (citizen)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  grant_type: refresh_token
+  refresh_token: {{refresh_token}}
+  client_id: sheba-portal
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("access_token", res.getBody().access_token);
+    bru.setVar("refresh_token", res.getBody().refresh_token);
+  }
+}
+
+docs {
+  Rotating refresh tokens — always overwrite BOTH stored tokens with the response.
+  Replaying a superseded refresh token revokes the whole family (RFC 9700).
+}

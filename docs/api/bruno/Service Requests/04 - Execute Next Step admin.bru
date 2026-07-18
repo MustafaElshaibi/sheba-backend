@@ -1,0 +1,20 @@
+meta {
+  name: Execute Next Step (admin)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/requests/{{request_id}}/execute-next
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  AnyAdmin. Manual workflow-step trigger — most transitions advance automatically in-process;
+  this is for operator-driven retries/manual advances.
+}

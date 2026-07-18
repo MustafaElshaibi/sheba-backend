@@ -1,0 +1,15 @@
+meta {
+  name: Establish Browser Session
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/identity/session/establish
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Create Ministry
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/ministry
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "MOI",
+    "nameAr": "وزارة الداخلية",
+    "nameEn": "Ministry of Interior",
+    "parentMinistryId": null,
+    "descriptionAr": null,
+    "descriptionEn": null,
+    "contactEmail": "it@moi.gov",
+    "contactPhone": "+967771234567"
+  }
+}

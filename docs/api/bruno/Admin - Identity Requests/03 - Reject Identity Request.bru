@@ -1,0 +1,26 @@
+meta {
+  name: Reject Identity Request
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/admin/identity-requests/{{request_id}}/reject
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "rejectionReason": "NID photo unreadable",
+    "notes": null
+  }
+}

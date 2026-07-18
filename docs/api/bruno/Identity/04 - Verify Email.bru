@@ -1,0 +1,22 @@
+meta {
+  name: Verify Email
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/identity/verify-email
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "accountId": "{{account_id}}",
+    "token": "b3f1c9d2e8a7"
+  }
+}

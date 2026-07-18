@@ -24,4 +24,5 @@ public sealed record MinistryCallResult(
     int? StatusCode,
     long DurationMs,
     string? ResponseBody,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    bool RateLimited = false); // true = the endpoint's RateLimitPerMinute was exceeded; call never sent (T-MIN-1)

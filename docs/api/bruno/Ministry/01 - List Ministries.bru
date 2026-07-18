@@ -1,0 +1,19 @@
+meta {
+  name: List Ministries
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/ministry?includeInactive=false
+  body: none
+  auth: bearer
+}
+
+params:query {
+  includeInactive: false
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}

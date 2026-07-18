@@ -1,0 +1,1238 @@
+openapi: 3.1.0
+info:
+  title: Sheba e-Government API
+  version: "1.0.0"
+  description: >
+    Yemen's national e-Government backend — OIDC/OAuth 2.1 identity provider (OpenIddict) and
+    government service gateway. **Generated from the current implementation** (`src/`). Every REST
+    response (except `/connect/*` and `/.well-known/*`) is wrapped in a JSend envelope
+    (`{status, data, message?, code?}`). OIDC endpoints speak OAuth error JSON, not JSend.
+    See docs/frontend-api.md for the human-readable reference and known discrepancies.
+  contact:
+    name: Sheba Platform Team
+    email: support@sheba.gov
+servers:
+  - url: https://localhost:7001
+    description: Local dev (HTTP allowed in dev)
+tags:
+  - name: Identity
+    description: Citizen registration & login (public, pre-auth)
+  - name: OIDC
+    description: OAuth 2.1 / OIDC endpoints (not JSend)
+  - name: Admin — Identity Requests
+  - name: Admin — Users & MFA
+  - name: Admin — Relying Parties
+  - name: Ministry
+  - name: Service Catalog
+  - name: Admin — Service Catalog
+  - name: Service Requests
+  - name: Documents
+  - name: Wallet
+  - name: Admin — Analytics & Reports
+  - name: Audit
+  - name: Webhooks
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────── Identity (public) ───────────────────────────
+  /api/identity/register:
+    post:
+      tags: [Identity]
+      summary: "Onboarding step 1 — verify NID+phone, create pending account, send OTP"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterCitizenCommand' }
+            example: { nationalId: "1000000001", phoneNumber: "0777000001" }
+      responses:
+        '200':
+          description: Account created; OTP dispatched
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JSend_RegisterCitizenResponse' }
+              example: { status: success, data: { accountId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", maskedPhone: "+967 777 ***001" } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '422': { $ref: '#/components/responses/JSendFail' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/JSendError' }
+
+  /api/identity/verify-otp:
+    post:
+      tags: [Identity]
+      summary: "Onboarding step 2 — verify registration OTP"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyOtpCommand' }
+            example: { accountId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", otp: "123456" }
+      responses:
+        '200':
+          description: Phone verified
+          content: { application/json: { schema: { $ref: '#/components/schemas/JSend_Message' } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/identity/complete-registration:
+    post:
+      tags: [Identity]
+      summary: "Onboarding step 3 — set username/email/password"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteRegistrationCommand' }
+            example: { accountId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", username: "ahmed.alyemeni", email: "ahmed@example.com", password: "Str0ng!Pass", confirmPassword: "Str0ng!Pass" }
+      responses:
+        '200':
+          description: Details saved; email verification sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JSend_CompleteRegistrationResponse' }
+        '400': { $ref: '#/components/responses/JSendFail' }
+
+  /api/identity/verify-email:
+    post:
+      tags: [Identity]
+      summary: "Onboarding step 4 — confirm email link"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailCommand' }
+            example: { accountId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", token: "b3f1c9d2e8a7" }
+      responses:
+        '200':
+          description: Email verified; request enters approval queue
+          content: { application/json: { schema: { $ref: '#/components/schemas/JSend_Message' } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+
+  /api/identity/login:
+    post:
+      tags: [Identity]
+      summary: "Login step 1 — validate credentials, dispatch login OTP"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginCitizenCommand' }
+            example: { usernameOrNid: "ahmed.alyemeni", password: "Str0ng!Pass" }
+      responses:
+        '200':
+          description: OTP dispatched
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JSend_LoginCitizenResponse' }
+              example: { status: success, data: { accountId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", maskedPhone: "+967 777 ***001" } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '422': { $ref: '#/components/responses/JSendFail' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/identity/login/verify-otp:
+    post:
+      tags: [Identity]
+      summary: "Login step 2 — verify login OTP (prefer going straight to /connect/token)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyOtpCommand' }
+      responses:
+        '200':
+          description: OTP verified; subject returned
+          content: { application/json: { schema: { $ref: '#/components/schemas/JSend_VerifyLoginOtpResponse' } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/identity/loa/upgrade:
+    post:
+      tags: [Identity]
+      summary: "Request a Level-of-Assurance upgrade for your own account"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { targetLevel: { type: integer, enum: [2, 3] } }
+              required: [targetLevel]
+      responses:
+        '200': { description: Upgrade request submitted, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/JSendFail' }
+
+  /api/identity/session/establish:
+    post:
+      tags: [Identity]
+      summary: "Bridge a bearer token into a browser session cookie for /connect/authorize SSO"
+      responses:
+        '200':
+          description: Session cookie set
+          content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ─────────────────────────── OIDC ───────────────────────────
+  /connect/token:
+    post:
+      tags: [OIDC]
+      summary: "Token endpoint (OAuth 2.1) — 5 grant types"
+      description: >
+        Grants: urn:sheba:grant:national_id_otp (citizen), urn:sheba:grant:admin_password (admin),
+        authorization_code (PKCE), refresh_token, client_credentials. Not JSend — OAuth JSON.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type: { type: string }
+                client_id: { type: string }
+                client_secret: { type: string }
+                scope: { type: string }
+                account_id: { type: string, description: "citizen grant" }
+                otp: { type: string, description: "citizen grant" }
+                employee_id_or_email: { type: string, description: "admin grant" }
+                password: { type: string, description: "admin grant" }
+                mfa_code: { type: string, description: "admin grant (once enrolled)" }
+                code: { type: string, description: "authorization_code grant" }
+                code_verifier: { type: string, description: "PKCE" }
+                redirect_uri: { type: string }
+                refresh_token: { type: string, description: "refresh grant" }
+              required: [grant_type]
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400':
+          description: OAuth error
+          content: { application/json: { schema: { $ref: '#/components/schemas/OAuthError' } } }
+        '429':
+          description: slow_down
+          content: { application/json: { schema: { $ref: '#/components/schemas/OAuthError' } } }
+
+  /connect/userinfo:
+    get:
+      tags: [OIDC]
+      summary: "UserInfo — claims filtered by granted scope"
+      responses:
+        '200': { description: Claims, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { description: Unauthenticated }
+
+  /connect/logout:
+    get:
+      tags: [OIDC]
+      summary: "End OpenIddict session"
+      security: []
+      responses: { '302': { description: Redirect } }
+
+  /connect/revoke:
+    post:
+      tags: [OIDC]
+      summary: "RFC 7009 token revocation"
+      security: []
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties: { token: { type: string }, token_type_hint: { type: string } }
+      responses: { '200': { description: Revoked } }
+
+  /connect/authorize:
+    get:
+      tags: [OIDC]
+      summary: "Authorization endpoint (PKCE) — browser SSO"
+      security: []
+      parameters:
+        - { name: response_type, in: query, schema: { type: string, enum: [code] }, required: true }
+        - { name: client_id, in: query, schema: { type: string }, required: true }
+        - { name: redirect_uri, in: query, schema: { type: string }, required: true }
+        - { name: scope, in: query, schema: { type: string }, required: true }
+        - { name: code_challenge, in: query, schema: { type: string }, required: true }
+        - { name: code_challenge_method, in: query, schema: { type: string, enum: [S256] }, required: true }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        '302': { description: "Redirect to redirect_uri with code, or to login/consent" }
+
+  /.well-known/openid-configuration:
+    get:
+      tags: [OIDC]
+      summary: "OIDC discovery document"
+      security: []
+      responses: { '200': { description: Discovery JSON, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  # ─────────────────────────── Admin — Identity ───────────────────────────
+  /api/admin/identity-requests:
+    get:
+      tags: [Admin — Identity Requests]
+      summary: "List identity requests (review queue)"
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/RequestStatus' } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200': { description: Paginated queue, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_IdentityRequestsPage' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/identity-requests/{requestId}/approve:
+    post:
+      tags: [Admin — Identity Requests]
+      summary: "Approve an identity request"
+      parameters: [ { name: requestId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { notes: { type: string, nullable: true } } } } }
+      responses:
+        '200': { description: Approved, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/JSendFail' }
+
+  /api/admin/identity-requests/{requestId}/reject:
+    post:
+      tags: [Admin — Identity Requests]
+      summary: "Reject an identity request with a reason"
+      parameters: [ { name: requestId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { rejectionReason: { type: string }, notes: { type: string, nullable: true } }
+              required: [rejectionReason]
+      responses:
+        '200': { description: Rejected, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/admin/accounts/{id}:
+    get:
+      tags: [Admin — Identity Requests]
+      summary: "Get a citizen account by id"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Account, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_AccountDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/admin/admin-users:
+    post:
+      tags: [Admin — Users & MFA]
+      summary: "Provision an admin account (SuperAdmin only)"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateAdminUserCommand' } } }
+      responses:
+        '200': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/mfa/enroll:
+    post:
+      tags: [Admin — Users & MFA]
+      summary: "MFA enrollment step 1 — generate TOTP secret"
+      responses:
+        '200': { description: Secret + provisioning URI, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_MfaEnroll' } } } }
+
+  /api/admin/mfa/verify:
+    post:
+      tags: [Admin — Users & MFA]
+      summary: "MFA enrollment step 2 — confirm + issue recovery codes"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { totpCode: { type: string, pattern: '^[0-9]{6}$' } }, required: [totpCode] } } }
+      responses:
+        '200': { description: Recovery codes (shown once), content: { application/json: { schema: { $ref: '#/components/schemas/JSend_RecoveryCodes' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+
+  # ─────────────────────────── Relying Parties ───────────────────────────
+  /api/admin/relying-parties:
+    get:
+      tags: [Admin — Relying Parties]
+      summary: "List OIDC clients"
+      responses: { '200': { description: Clients, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_RelyingPartyList' } } } } }
+    post:
+      tags: [Admin — Relying Parties]
+      summary: "Register a relying party (secret returned once for confidential)"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRelyingPartyRequest' } } }
+      responses:
+        '201': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '409': { $ref: '#/components/responses/JSendFail' }
+
+  /api/admin/relying-parties/{clientId}:
+    get:
+      tags: [Admin — Relying Parties]
+      summary: "Get a relying party (no secret)"
+      parameters: [ { name: clientId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: Client, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Admin — Relying Parties]
+      summary: "Revoke/remove a client"
+      parameters: [ { name: clientId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/admin/relying-parties/{clientId}/rotate-secret:
+    post:
+      tags: [Admin — Relying Parties]
+      summary: "Rotate a confidential client's secret (returned once)"
+      parameters: [ { name: clientId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: New secret, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─────────────────────────── Ministry ───────────────────────────
+  /api/ministry:
+    get:
+      tags: [Ministry]
+      summary: "List ministries"
+      parameters: [ { name: includeInactive, in: query, schema: { type: boolean, default: false } } ]
+      responses: { '200': { description: Ministries, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_MinistryList' } } } } }
+    post:
+      tags: [Ministry]
+      summary: "Create ministry"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateMinistryCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/ministry/{id}:
+    get:
+      tags: [Ministry]
+      summary: "Ministry detail"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Detail, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_MinistryDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Ministry]
+      summary: "Update ministry"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateMinistryCommand' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/ministry/{id}/auth-config:
+    post:
+      tags: [Ministry]
+      summary: "Add auth configuration (encrypted credentials)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SetMinistryAuthConfigCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/ministry/{id}/test-connection:
+    post:
+      tags: [Ministry]
+      summary: "Test connectivity to a ministry API"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { authConfigId: { type: string, format: uuid } }, required: [authConfigId] } } } }
+      responses: { '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/ministry/{id}/endpoints:
+    post:
+      tags: [Ministry]
+      summary: "Register a ministry endpoint"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterMinistryEndpointCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/ministry/{id}/webhooks:
+    post:
+      tags: [Ministry]
+      summary: "Register a ministry webhook"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterMinistryWebhookCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  # ─────────────────────────── Service Catalog ───────────────────────────
+  /api/services:
+    get:
+      tags: [Service Catalog]
+      summary: "Service catalog grouped by category"
+      security: []
+      parameters: [ { name: includeInactive, in: query, schema: { type: boolean, default: false } } ]
+      responses: { '200': { description: Catalog, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_ServiceCatalog' } } } } }
+
+  /api/services/{id}:
+    get:
+      tags: [Service Catalog]
+      summary: "Service detail (form schema, fees, docs, workflow)"
+      security: []
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Detail, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_ServiceDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/admin/services:
+    post:
+      tags: [Admin — Service Catalog]
+      summary: "Create a service definition (starts unpublished)"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateServiceDefinitionCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/admin/services/categories:
+    post:
+      tags: [Admin — Service Catalog]
+      summary: "Create a service category"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateServiceCategoryCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/admin/services/{id}:
+    put:
+      tags: [Admin — Service Catalog]
+      summary: "Update / publish / depublish a service"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateServiceDefinitionCommand' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/admin/services/{id}/fees:
+    post:
+      tags: [Admin — Service Catalog]
+      summary: "Add a fee to a service"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SetServiceFeeCommand' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  # ─────────────────────────── Service Requests ───────────────────────────
+  /api/requests:
+    post:
+      tags: [Service Requests]
+      summary: "Submit a service request (as yourself) and start the workflow"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitServiceRequestBody' } } } }
+      responses:
+        '201': { description: Submitted, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_SubmitServiceRequest' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+        '422': { $ref: '#/components/responses/JSendFail' }
+
+  /api/requests/mine:
+    get:
+      tags: [Service Requests]
+      summary: "List the calling citizen's requests"
+      responses: { '200': { description: Requests, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_CitizenRequestList' } } } } }
+
+  /api/requests/{id}:
+    get:
+      tags: [Service Requests]
+      summary: "Request detail with step executions (own, unless admin)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Detail, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_RequestDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/requests/{id}/execute-next:
+    post:
+      tags: [Service Requests]
+      summary: "Manually advance the workflow (admin/operator)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Advanced, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/requests/payments/{paymentOrderId}/complete:
+    post:
+      tags: [Service Requests]
+      summary: "Mark your own payment complete (mock gateway)"
+      parameters: [ { name: paymentOrderId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Paid, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/admin/requests:
+    get:
+      tags: [Service Requests]
+      summary: "Admin list of requests with filters"
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/RequestLifecycleStatus' } }
+        - { name: serviceId, in: query, schema: { type: string, format: uuid } }
+        - { name: ministryId, in: query, schema: { type: string, format: uuid } }
+        - { name: fromDate, in: query, schema: { type: string, format: date-time } }
+        - { name: toDate, in: query, schema: { type: string, format: date-time } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20 } }
+      responses: { '200': { description: Requests, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_AdminRequestsPage' } } } } }
+
+  # ─────────────────────────── Documents ───────────────────────────
+  /api/documents:
+    post:
+      tags: [Documents]
+      summary: "Upload a document (JPEG/PNG/WebP/PDF, max 10 MB)"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                documentType: { type: string, default: GENERAL }
+              required: [file]
+      responses:
+        '201': { description: Uploaded, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_UploadDocument' } } } }
+        '400': { $ref: '#/components/responses/JSendFail' }
+
+  /api/documents/mine:
+    get:
+      tags: [Documents]
+      summary: "List the caller's documents"
+      responses: { '200': { description: Documents, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_DocumentList' } } } } }
+
+  /api/documents/{id}/download-url:
+    get:
+      tags: [Documents]
+      summary: "Presigned download URL (valid 15 min)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: URL, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_DownloadUrl' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/documents/{id}:
+    delete:
+      tags: [Documents]
+      summary: "Delete a document (owner/admin)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  # ─────────────────────────── Wallet ───────────────────────────
+  /api/wallet/credentials:
+    get:
+      tags: [Wallet]
+      summary: "List the caller's Verifiable Credentials"
+      responses: { '200': { description: VCs, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_CredentialList' } } } } }
+
+  /api/admin/wallet/credentials/issue:
+    post:
+      tags: [Wallet]
+      summary: "Admin: force-issue a VC for an approved account"
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { accountId: { type: string, format: uuid } }, required: [accountId] } } } }
+      responses: { '201': { description: Issued, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  # ─────────────────────────── Admin analytics/reports ───────────────────────────
+  /api/admin/analytics/kpis:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Live platform KPIs"
+      responses: { '200': { description: KPIs, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_Kpi' } } } } }
+
+  /api/admin/analytics/trends/registrations:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Daily registration trend points"
+      parameters: [ { name: days, in: query, schema: { type: integer, default: 30 } } ]
+      responses: { '200': { description: Trend, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_RegistrationTrends' } } } } }
+
+  /api/admin/analytics/trends/service-requests:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Daily service-request trend points"
+      parameters: [ { name: days, in: query, schema: { type: integer, default: 30 } } ]
+      responses: { '200': { description: Trend, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_ServiceTrends' } } } } }
+
+  /api/admin/reports/identity-requests:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Download identity-requests report (PDF default / Excel)"
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: format, in: query, schema: { type: string, enum: [pdf, excel], default: pdf } }
+      responses:
+        '200':
+          description: File
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+
+  /api/admin/reports/service-requests:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Download service-requests report (Excel)"
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: File
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+
+  /api/admin/audit/export:
+    get:
+      tags: [Admin — Analytics & Reports]
+      summary: "Export analytics CSV (registrations or service-requests)"
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: type, in: query, schema: { type: string, enum: [service-requests, registrations] } }
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string, format: binary } } } }
+
+  /api/admin/audit:
+    get:
+      tags: [Audit]
+      summary: "Paginated audit log (Auditor)"
+      parameters:
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 25 } }
+      responses: { '200': { description: Log, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_AuditLog' } } } } }
+
+  # ─────────────────────────── Webhooks (server-to-server) ───────────────────────────
+  /api/webhooks/ministry/{ministryId}:
+    post:
+      tags: [Webhooks]
+      summary: "Inbound ministry callback (HMAC-verified) — not a frontend surface"
+      security: []
+      parameters:
+        - { name: ministryId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Sheba-Event, in: header, schema: { type: string } }
+        - { name: X-Sheba-Signature, in: header, schema: { type: string } }
+        - { name: X-Sheba-Timestamp, in: header, schema: { type: string } }
+        - { name: X-Sheba-Delivery-Id, in: header, schema: { type: string } }
+      requestBody: { content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Accepted }
+        '400': { description: Rejected (bad signature/timestamp/duplicate) }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT access token from /connect/token."
+
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: "Optional; echoed on every response."
+
+  responses:
+    JSendFail:
+      description: "fail — caller-fixable (validation dictionary or single descriptive key)"
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendFail' } } }
+    JSendError:
+      description: "error — server fault (5xx) with correlation_id"
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendErrorEnvelope' } } }
+    Unauthorized:
+      description: "401 — authentication required"
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendFail' } }, }
+    Forbidden:
+      description: "403 — insufficient permission"
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendFail' } } }
+    NotFound:
+      description: "404 — resource not found"
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendFail' } } }
+    RateLimited:
+      description: "429 — rate limited (Retry-After header, seconds)"
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/JSendFail' } } }
+
+  schemas:
+    # ── Envelope ──
+    JSendSuccess:
+      type: object
+      properties:
+        status: { type: string, const: success }
+        data: {}
+      required: [status]
+    JSendFail:
+      type: object
+      properties:
+        status: { type: string, const: fail }
+        data:
+          type: object
+          additionalProperties: { type: string }
+          description: "field → message dictionary"
+      required: [status, data]
+    JSendErrorEnvelope:
+      type: object
+      properties:
+        status: { type: string, const: error }
+        message: { type: string }
+        code: { type: integer }
+        data: { type: object, properties: { correlation_id: { type: string } } }
+      required: [status, message]
+    OAuthError:
+      type: object
+      properties:
+        error: { type: string }
+        error_description: { type: string }
+    TokenResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 900 }
+        id_token: { type: string }
+        refresh_token: { type: string }
+        scope: { type: string }
+
+    # ── Enums ──
+    RequestStatus: { type: string, enum: [Pending, UnderReview, Approved, Rejected, Cancelled] }
+    RequestType: { type: string, enum: [OpenAccount, UpgradeLoa2, UpgradeLoa3, ReopenAccount] }
+    AccountStatus: { type: string, enum: [PendingVerification, PendingEmailVerification, PendingAdminApproval, Approved, Rejected, Suspended, Deactivated] }
+    AdminRole: { type: string, enum: [SuperAdmin, IdentityReviewer, MinistryManager, Auditor, Support] }
+    MinistryAuthType: { type: string, enum: [Oidc, OAuth2, ApiKey, BearerToken, BasicAuth, Saml, Custom, None] }
+    EndpointType: { type: string, enum: [DataQuery, ServiceAction, WebhookRegister, StatusCheck, DocumentFetch, Health] }
+    ApiKeyPlacement: { type: string, enum: [Header, Query, Cookie] }
+    RequestLifecycleStatus: { type: string, enum: [Draft, Submitted, PaymentPending, UnderReview, Processing, AwaitingMinistry, ActionRequired, Completed, Rejected, Cancelled, Expired] }
+    WorkflowStepType: { type: string, enum: [CitizenSubmit, Payment, MinistryApiCall, MinistryReview, AdminReview, DocumentIssue, Notification, WebhookWait, Appointment] }
+    WorkflowActor: { type: string, enum: [Citizen, System, Ministry, ShebaAdmin] }
+
+    # ── Requests ──
+    RegisterCitizenCommand:
+      type: object
+      properties:
+        nationalId: { type: string, minLength: 10, maxLength: 20, pattern: '^\d+$' }
+        phoneNumber: { type: string, pattern: '^(\+967|967|0)\d{9}$' }
+      required: [nationalId, phoneNumber]
+    VerifyOtpCommand:
+      type: object
+      properties: { accountId: { type: string, format: uuid }, otp: { type: string, pattern: '^\d{6}$' } }
+      required: [accountId, otp]
+    CompleteRegistrationCommand:
+      type: object
+      properties:
+        accountId: { type: string, format: uuid }
+        username: { type: string, minLength: 3, maxLength: 100, pattern: '^[a-zA-Z0-9_.-]+$' }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 256 }
+        confirmPassword: { type: string }
+      required: [accountId, username, email, password, confirmPassword]
+    VerifyEmailCommand:
+      type: object
+      properties: { accountId: { type: string, format: uuid }, token: { type: string } }
+      required: [accountId, token]
+    LoginCitizenCommand:
+      type: object
+      properties: { usernameOrNid: { type: string, maxLength: 100 }, password: { type: string, maxLength: 256 } }
+      required: [usernameOrNid, password]
+    CreateAdminUserCommand:
+      type: object
+      properties:
+        employeeId: { type: string, maxLength: 50 }
+        email: { type: string, format: email, maxLength: 254 }
+        fullName: { type: string, maxLength: 200 }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        password: { type: string, minLength: 8, maxLength: 256 }
+        department: { type: string, maxLength: 100, nullable: true }
+        ministryId: { type: string, format: uuid, nullable: true }
+      required: [employeeId, email, fullName, role, password]
+    RegisterRelyingPartyRequest:
+      type: object
+      properties:
+        clientId: { type: string }
+        displayName: { type: string, nullable: true }
+        clientType: { type: string, enum: [public, confidential], default: public }
+        clientSecret: { type: string, nullable: true }
+        redirectUris: { type: array, items: { type: string } }
+        postLogoutRedirectUris: { type: array, items: { type: string } }
+        scopes: { type: array, items: { type: string } }
+      required: [clientId]
+    CreateMinistryCommand:
+      type: object
+      properties:
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        parentMinistryId: { type: string, format: uuid, nullable: true }
+        descriptionAr: { type: string, nullable: true }
+        descriptionEn: { type: string, nullable: true }
+        contactEmail: { type: string, nullable: true }
+        contactPhone: { type: string, nullable: true }
+      required: [code, nameAr, nameEn]
+    UpdateMinistryCommand:
+      type: object
+      properties:
+        nameAr: { type: string }
+        nameEn: { type: string }
+        descriptionAr: { type: string, nullable: true }
+        descriptionEn: { type: string, nullable: true }
+        logoUrl: { type: string, nullable: true }
+        websiteUrl: { type: string, nullable: true }
+        contactEmail: { type: string, nullable: true }
+        contactPhone: { type: string, nullable: true }
+        addressAr: { type: string, nullable: true }
+        addressEn: { type: string, nullable: true }
+        displayOrder: { type: integer, default: 0 }
+        isActive: { type: boolean, default: true }
+      required: [nameAr, nameEn]
+    SetMinistryAuthConfigCommand:
+      type: object
+      properties:
+        name: { type: string }
+        authType: { $ref: '#/components/schemas/MinistryAuthType' }
+        baseUrl: { type: string }
+        isDefault: { type: boolean, default: false }
+        healthCheckPath: { type: string, nullable: true }
+        timeoutSeconds: { type: integer, default: 30 }
+        retryCount: { type: integer, default: 3 }
+        oidcTokenEndpoint: { type: string, nullable: true }
+        oidcClientId: { type: string, nullable: true }
+        oidcClientSecret: { type: string, nullable: true }
+        oidcScope: { type: string, nullable: true }
+        apiKeyHeaderName: { type: string, nullable: true }
+        apiKeyValue: { type: string, nullable: true }
+        apiKeyPlacementType: { $ref: '#/components/schemas/ApiKeyPlacement' }
+        bearerToken: { type: string, nullable: true }
+        basicUsername: { type: string, nullable: true }
+        basicPassword: { type: string, nullable: true }
+      required: [name, authType, baseUrl]
+    RegisterMinistryEndpointCommand:
+      type: object
+      properties:
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        httpMethod: { type: string }
+        pathTemplate: { type: string }
+        type: { $ref: '#/components/schemas/EndpointType' }
+        authConfigId: { type: string, format: uuid, nullable: true }
+        descriptionAr: { type: string, nullable: true }
+        descriptionEn: { type: string, nullable: true }
+        timeoutSeconds: { type: integer, default: 30 }
+        rateLimitPerMinute: { type: integer, nullable: true }
+        requiresCitizenConsent: { type: boolean, default: false }
+      required: [code, nameAr, nameEn, httpMethod, pathTemplate, type]
+    RegisterMinistryWebhookCommand:
+      type: object
+      properties:
+        eventType: { type: string }
+        shebaWebhookPath: { type: string }
+        signingSecret: { type: string }
+        endpointId: { type: string, format: uuid, nullable: true }
+      required: [eventType, shebaWebhookPath, signingSecret]
+    CreateServiceCategoryCommand:
+      type: object
+      properties:
+        nameAr: { type: string }
+        nameEn: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+        iconUrl: { type: string, nullable: true }
+        displayOrder: { type: integer, default: 0 }
+      required: [nameAr, nameEn]
+    CreateServiceDefinitionCommand:
+      type: object
+      properties:
+        categoryId: { type: string, format: uuid }
+        ministryId: { type: string, format: uuid }
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        descriptionAr: { type: string, nullable: true }
+        descriptionEn: { type: string, nullable: true }
+        requiredLoa: { type: integer, default: 1 }
+        averageDays: { type: integer, nullable: true }
+        formSchemaJson: { type: string, nullable: true }
+        uiSchemaJson: { type: string, nullable: true }
+      required: [categoryId, ministryId, code, nameAr, nameEn]
+    UpdateServiceDefinitionCommand:
+      type: object
+      properties:
+        nameAr: { type: string }
+        nameEn: { type: string }
+        descriptionAr: { type: string, nullable: true }
+        descriptionEn: { type: string, nullable: true }
+        requiredLoa: { type: integer, default: 1 }
+        requiresAppointment: { type: boolean, default: false }
+        isOnline: { type: boolean, default: true }
+        averageDays: { type: integer, nullable: true }
+        displayOrder: { type: integer, default: 0 }
+        publish: { type: boolean, nullable: true }
+      required: [nameAr, nameEn]
+    SetServiceFeeCommand:
+      type: object
+      properties:
+        feeType: { type: string, example: BASE }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        amount: { type: number }
+        currency: { type: string, default: YER }
+        isMandatory: { type: boolean, default: true }
+      required: [feeType, nameAr, nameEn, amount]
+    SubmitServiceRequestBody:
+      type: object
+      properties:
+        serviceId: { type: string, format: uuid }
+        formDataJson: { type: string, description: "JSON string, validated against the service form schema" }
+        priority: { type: string, default: NORMAL }
+      required: [serviceId, formDataJson]
+
+    # ── Response DTOs (data payloads) ──
+    RegisterCitizenResponse:
+      type: object
+      properties: { accountId: { type: string, format: uuid }, maskedPhone: { type: string } }
+    LoginCitizenResponse:
+      type: object
+      properties: { accountId: { type: string, format: uuid }, maskedPhone: { type: string } }
+    CompleteRegistrationResponse:
+      type: object
+      properties: { accountId: { type: string, format: uuid }, identityRequestId: { type: string, format: uuid }, message: { type: string } }
+    VerifyLoginOtpResponse:
+      type: object
+      properties:
+        accountId: { type: string, format: uuid }
+        nationalId: { type: string, nullable: true }
+        username: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        fullNameEn: { type: string, nullable: true }
+        identityLevel: { type: integer }
+    AccountDetailDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        maskedNid: { type: string }
+        username: { type: string }
+        email: { type: string }
+        maskedPhone: { type: string }
+        fullNameAr: { type: string }
+        fullNameEn: { type: string }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        identityLevel: { type: integer }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+    IdentityRequestSummary:
+      type: object
+      properties:
+        requestId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        fullNameAr: { type: string }
+        fullNameEn: { type: string }
+        maskedNid: { type: string }
+        status: { $ref: '#/components/schemas/RequestStatus' }
+        requestType: { $ref: '#/components/schemas/RequestType' }
+        submittedAt: { type: string, format: date-time }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+    MfaEnrollResponse:
+      type: object
+      properties: { secret: { type: string }, provisioningUri: { type: string } }
+    RelyingPartyDto:
+      type: object
+      properties:
+        clientId: { type: string }
+        displayName: { type: string, nullable: true }
+        clientType: { type: string }
+        redirectUris: { type: array, items: { type: string } }
+        scopes: { type: array, items: { type: string } }
+    MinistrySummaryDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        parentMinistryId: { type: string, format: uuid, nullable: true }
+        depthLevel: { type: integer }
+        isActive: { type: boolean }
+        endpointCount: { type: integer }
+        authConfigCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    ServiceSummaryDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        descriptionEn: { type: string, nullable: true }
+        requiredLoa: { type: integer }
+        isOnline: { type: boolean }
+        averageDays: { type: integer, nullable: true }
+        isActive: { type: boolean }
+        fees: { type: array, items: { $ref: '#/components/schemas/FeeSummaryDto' } }
+    FeeSummaryDto:
+      type: object
+      properties:
+        feeType: { type: string }
+        nameEn: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        isMandatory: { type: boolean }
+    ServiceDetailDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameAr: { type: string }
+        nameEn: { type: string }
+        categoryId: { type: string, format: uuid }
+        ministryId: { type: string, format: uuid }
+        requiredLoa: { type: integer }
+        requiresAppointment: { type: boolean }
+        isOnline: { type: boolean }
+        isActive: { type: boolean }
+        averageDays: { type: integer, nullable: true }
+        formSchema:
+          type: object
+          nullable: true
+          properties: { id: { type: string, format: uuid }, schemaVersion: { type: string }, formSchemaJson: { type: string }, uiSchemaJson: { type: string, nullable: true } }
+        fees: { type: array, items: { $ref: '#/components/schemas/FeeSummaryDto' } }
+        workflowSteps:
+          type: array
+          items:
+            type: object
+            properties: { id: { type: string }, stepOrder: { type: integer }, nameEn: { type: string }, stepType: { $ref: '#/components/schemas/WorkflowStepType' }, actor: { $ref: '#/components/schemas/WorkflowActor' }, isAutomated: { type: boolean }, timeoutHours: { type: integer, nullable: true } }
+    SubmitServiceRequestResponse:
+      type: object
+      properties:
+        requestId: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string }
+        message: { type: string }
+    CitizenRequestDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        serviceId: { type: string, format: uuid }
+        status: { type: string }
+        currentStep: { type: integer }
+        priority: { type: string }
+        submittedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        dueDate: { type: string, format: date-time, nullable: true }
+    RequestDetailDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        serviceId: { type: string, format: uuid }
+        citizenId: { type: string, format: uuid }
+        status: { type: string }
+        currentStep: { type: integer }
+        priority: { type: string }
+        submittedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        dueDate: { type: string, format: date-time, nullable: true }
+        rejectionReason: { type: string, nullable: true }
+        formDataJson: { type: string, nullable: true }
+        steps:
+          type: array
+          items:
+            type: object
+            properties: { id: { type: string }, stepOrder: { type: integer }, status: { type: string }, startedAt: { type: string, format: date-time }, completedAt: { type: string, format: date-time, nullable: true }, actorType: { type: string, nullable: true }, errorMessage: { type: string, nullable: true } }
+    UploadDocumentResponse:
+      type: object
+      properties: { documentId: { type: string, format: uuid }, fileName: { type: string }, sizeBytes: { type: integer }, message: { type: string } }
+    DocumentSummaryDto:
+      type: object
+      properties: { id: { type: string, format: uuid }, fileName: { type: string }, contentType: { type: string }, sizeBytes: { type: integer }, documentType: { type: string }, createdAt: { type: string, format: date-time } }
+    DocumentDownloadUrlDto:
+      type: object
+      properties: { documentId: { type: string, format: uuid }, fileName: { type: string }, contentType: { type: string }, downloadUrl: { type: string }, expiresAt: { type: string, format: date-time } }
+    CredentialDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        credentialType: { type: string }
+        issuerDid: { type: string }
+        subjectDid: { type: string }
+        jwt: { type: string }
+        claims: { type: object, additionalProperties: true, nullable: true }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        isRevoked: { type: boolean }
+    KpiSummaryDto:
+      type: object
+      properties: { totalAccounts: { type: integer }, pendingIdentityRequests: { type: integer }, todayCompletions: { type: integer }, avgApprovalHoursLast30Days: { type: number }, slaBreachCount: { type: integer } }
+    TrendPointDto:
+      type: object
+      properties: { date: { type: string, format: date }, totalRegistrations: { type: integer }, approved: { type: integer }, rejected: { type: integer } }
+    ServiceTrendPointDto:
+      type: object
+      properties: { date: { type: string, format: date }, submitted: { type: integer }, completed: { type: integer } }
+    AuditEventDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorId: { type: string, format: uuid }
+        action: { type: string }
+        entityType: { type: string, nullable: true }
+        entityId: { type: string, format: uuid, nullable: true }
+        timestamp: { type: string, format: date-time }
+        ipAddress: { type: string, nullable: true }
+        succeeded: { type: boolean }
+        errorMessage: { type: string, nullable: true }
+
+    # ── JSend-wrapped composites (used by responses) ──
+    JSend_Message: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: object, properties: { message: { type: string } } } } } ] }
+    JSend_RegisterCitizenResponse: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/RegisterCitizenResponse' } } } ] }
+    JSend_LoginCitizenResponse: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/LoginCitizenResponse' } } } ] }
+    JSend_CompleteRegistrationResponse: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/CompleteRegistrationResponse' } } } ] }
+    JSend_VerifyLoginOtpResponse: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/VerifyLoginOtpResponse' } } } ] }
+    JSend_AccountDetail: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/AccountDetailDto' } } } ] }
+    JSend_MfaEnroll: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/MfaEnrollResponse' } } } ] }
+    JSend_RecoveryCodes: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: object, properties: { recoveryCodes: { type: array, items: { type: string } } } } } } ] }
+    JSend_RelyingPartyList: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/RelyingPartyDto' } } } } ] }
+    JSend_MinistryList: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MinistrySummaryDto' } } } } ] }
+    JSend_MinistryDetail: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: object, additionalProperties: true } } } ] }
+    JSend_ServiceCatalog: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: object, properties: { categories: { type: array, items: { type: object, additionalProperties: true } } } } } } ] }
+    JSend_ServiceDetail: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/ServiceDetailDto' } } } ] }
+    JSend_SubmitServiceRequest: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/SubmitServiceRequestResponse' } } } ] }
+    JSend_CitizenRequestList: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/CitizenRequestDto' } } } } ] }
+    JSend_RequestDetail: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/RequestDetailDto' } } } ] }
+    JSend_UploadDocument: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/UploadDocumentResponse' } } } ] }
+    JSend_DocumentList: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DocumentSummaryDto' } } } } ] }
+    JSend_DownloadUrl: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/DocumentDownloadUrlDto' } } } ] }
+    JSend_CredentialList: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/CredentialDto' } } } } ] }
+    JSend_Kpi: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { $ref: '#/components/schemas/KpiSummaryDto' } } } ] }
+    JSend_RegistrationTrends: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/TrendPointDto' } } } } ] }
+    JSend_ServiceTrends: { allOf: [ { $ref: '#/components/schemas/JSendSuccess' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ServiceTrendPointDto' } } } } ] }
+    JSend_IdentityRequestsPage:
+      allOf:
+        - { $ref: '#/components/schemas/JSendSuccess' }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '#/components/schemas/IdentityRequestSummary' } }
+                totalCount: { type: integer }
+                page: { type: integer }
+                pageSize: { type: integer }
+                totalPages: { type: integer }
+    JSend_AdminRequestsPage:
+      allOf:
+        - { $ref: '#/components/schemas/JSendSuccess' }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items: { type: array, items: { type: object, additionalProperties: true } }
+                totalCount: { type: integer }
+                page: { type: integer }
+                pageSize: { type: integer }
+                totalPages: { type: integer }
+    JSend_AuditLog:
+      allOf:
+        - { $ref: '#/components/schemas/JSendSuccess' }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items: { type: array, items: { $ref: '#/components/schemas/AuditEventDto' } }
+                totalCount: { type: integer }
+                page: { type: integer }
+                pageSize: { type: integer }

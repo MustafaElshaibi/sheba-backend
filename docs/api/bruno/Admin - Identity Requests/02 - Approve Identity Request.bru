@@ -1,0 +1,25 @@
+meta {
+  name: Approve Identity Request
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/admin/identity-requests/{{request_id}}/approve
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "notes": "Verified against registry snapshot."
+  }
+}

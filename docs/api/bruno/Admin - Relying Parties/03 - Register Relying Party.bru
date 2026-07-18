@@ -1,0 +1,31 @@
+meta {
+  name: Register Relying Party
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/admin/relying-parties
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "clientId": "moi-portal",
+    "displayName": "MOI Citizen Portal",
+    "clientType": "confidential",
+    "clientSecret": null,
+    "redirectUris": ["https://moi.gov.ye/callback"],
+    "postLogoutRedirectUris": ["https://moi.gov.ye"],
+    "scopes": ["openid", "profile", "civil_data"]
+  }
+}

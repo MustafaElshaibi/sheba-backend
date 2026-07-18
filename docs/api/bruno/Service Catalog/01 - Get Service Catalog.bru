@@ -1,0 +1,20 @@
+meta {
+  name: Get Service Catalog
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/services?includeInactive=false
+  body: none
+  auth: none
+}
+
+params:query {
+  includeInactive: false
+}
+
+docs {
+  Public, anonymous. Response is NOT JSend-wrapped (raw array grouped by category) —
+  see docs/frontend-api.md discrepancy note.
+}

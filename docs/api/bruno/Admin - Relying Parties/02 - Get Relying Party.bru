@@ -1,0 +1,15 @@
+meta {
+  name: Get Relying Party
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/admin/relying-parties/sheba-portal
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}

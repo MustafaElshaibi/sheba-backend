@@ -1,0 +1,22 @@
+meta {
+  name: Verify Registration OTP
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/identity/verify-otp
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "accountId": "{{account_id}}",
+    "otp": "123456"
+  }
+}

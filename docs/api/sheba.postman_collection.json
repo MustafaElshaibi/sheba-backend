@@ -1,0 +1,731 @@
+{
+  "info": {
+    "_postman_id": "3f6b7a9e-4c2d-4a1b-9e3f-sheba00000001",
+    "name": "Sheba e-Government API",
+    "description": "Generated from the current implementation (src/). Every REST response (except /connect/* and /.well-known/*) is a JSend envelope. See docs/frontend-api.md for the full reference.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{access_token}}", "type": "string" } ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": { "type": "text/javascript", "exec": [
+        "pm.request.headers.add({ key: 'X-Correlation-Id', value: pm.variables.replaceIn('{{$guid}}') });"
+      ] }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:7001" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "admin_access_token", "value": "" },
+    { "key": "admin_refresh_token", "value": "" },
+    { "key": "account_id", "value": "" },
+    { "key": "request_id", "value": "" },
+    { "key": "service_id", "value": "" },
+    { "key": "ministry_id", "value": "00000000-0000-0000-0001-000000000001" },
+    { "key": "document_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Identity — Registration & Login",
+      "item": [
+        {
+          "name": "Register Citizen",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"nationalId\": \"1000000001\",\n  \"phoneNumber\": \"0777000001\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/register", "host": ["{{baseUrl}}"], "path": ["api","identity","register"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.collectionVariables.set('account_id', b.data.accountId); }"
+          ] } } ]
+        },
+        {
+          "name": "Verify Registration OTP",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"otp\": \"123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/verify-otp", "host": ["{{baseUrl}}"], "path": ["api","identity","verify-otp"] }
+          }
+        },
+        {
+          "name": "Complete Registration",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"username\": \"ahmed.alyemeni\",\n  \"email\": \"ahmed@example.com\",\n  \"password\": \"Str0ng!Pass\",\n  \"confirmPassword\": \"Str0ng!Pass\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/complete-registration", "host": ["{{baseUrl}}"], "path": ["api","identity","complete-registration"] }
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"token\": \"b3f1c9d2e8a7\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/verify-email", "host": ["{{baseUrl}}"], "path": ["api","identity","verify-email"] }
+          }
+        },
+        {
+          "name": "Login (step 1 — dispatch OTP)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"usernameOrNid\": \"ahmed.alyemeni\",\n  \"password\": \"Str0ng!Pass\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/login", "host": ["{{baseUrl}}"], "path": ["api","identity","login"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.collectionVariables.set('account_id', b.data.accountId); }"
+          ] } } ]
+        },
+        {
+          "name": "Login (step 2 — verify OTP, no tokens)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"otp\": \"123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/login/verify-otp", "host": ["{{baseUrl}}"], "path": ["api","identity","login","verify-otp"] }
+          }
+        },
+        {
+          "name": "Request LoA Upgrade",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"targetLevel\": 2\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/loa/upgrade", "host": ["{{baseUrl}}"], "path": ["api","identity","loa","upgrade"] }
+          }
+        },
+        {
+          "name": "Establish Browser Session",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/identity/session/establish", "host": ["{{baseUrl}}"], "path": ["api","identity","session","establish"] }
+          }
+        },
+        {
+          "name": "[PARTIAL] Password Reset — Request",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"usernameOrNid\": \"ahmed.alyemeni\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/password-reset/request", "host": ["{{baseUrl}}"], "path": ["api","identity","password-reset","request"] },
+            "description": "NOT WIRED — command exists but no route is mapped. Expect 404 until T-xxx ships."
+          }
+        },
+        {
+          "name": "[PARTIAL] Password Reset — Confirm",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"usernameOrNid\": \"ahmed.alyemeni\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"N3w!Pass\",\n  \"confirmNewPassword\": \"N3w!Pass\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/identity/password-reset/confirm", "host": ["{{baseUrl}}"], "path": ["api","identity","password-reset","confirm"] },
+            "description": "NOT WIRED — expect 404."
+          }
+        }
+      ]
+    },
+    {
+      "name": "OIDC — /connect",
+      "item": [
+        {
+          "name": "Token — Citizen (national_id_otp)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "urn:sheba:grant:national_id_otp" },
+              { "key": "account_id", "value": "{{account_id}}" },
+              { "key": "otp", "value": "123456" },
+              { "key": "client_id", "value": "sheba-portal" },
+              { "key": "scope", "value": "openid profile email offline_access" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/connect/token", "host": ["{{baseUrl}}"], "path": ["connect","token"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.collectionVariables.set('access_token', b.access_token); pm.collectionVariables.set('refresh_token', b.refresh_token); }"
+          ] } } ]
+        },
+        {
+          "name": "Token — Admin (admin_password)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "urn:sheba:grant:admin_password" },
+              { "key": "employee_id_or_email", "value": "admin@sheba.gov" },
+              { "key": "password", "value": "Admin@123" },
+              { "key": "mfa_code", "value": "", "disabled": true },
+              { "key": "client_id", "value": "sheba-admin" },
+              { "key": "client_secret", "value": "sheba-admin-dev-secret" },
+              { "key": "scope", "value": "openid profile admin_api" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/connect/token", "host": ["{{baseUrl}}"], "path": ["connect","token"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.collectionVariables.set('admin_access_token', b.access_token); pm.collectionVariables.set('admin_refresh_token', b.refresh_token); }"
+          ] } } ]
+        },
+        {
+          "name": "Token — Refresh (citizen)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "refresh_token" },
+              { "key": "refresh_token", "value": "{{refresh_token}}" },
+              { "key": "client_id", "value": "sheba-portal" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/connect/token", "host": ["{{baseUrl}}"], "path": ["connect","token"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) { const b = pm.response.json(); pm.collectionVariables.set('access_token', b.access_token); pm.collectionVariables.set('refresh_token', b.refresh_token); }"
+          ] } } ]
+        },
+        {
+          "name": "Token — client_credentials (ministry)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "client_credentials" },
+              { "key": "client_id", "value": "sheba-api-internal" },
+              { "key": "client_secret", "value": "sheba-api-internal-dev-secret" },
+              { "key": "scope", "value": "ministry_api" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/connect/token", "host": ["{{baseUrl}}"], "path": ["connect","token"] }
+          }
+        },
+        {
+          "name": "UserInfo",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/connect/userinfo", "host": ["{{baseUrl}}"], "path": ["connect","userinfo"] }
+          }
+        },
+        {
+          "name": "Revoke Token",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "token", "value": "{{refresh_token}}" },
+              { "key": "token_type_hint", "value": "refresh_token" },
+              { "key": "client_id", "value": "sheba-portal" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/connect/revoke", "host": ["{{baseUrl}}"], "path": ["connect","revoke"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/connect/logout", "host": ["{{baseUrl}}"], "path": ["connect","logout"] } }
+        },
+        {
+          "name": "Discovery Document",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/.well-known/openid-configuration", "host": ["{{baseUrl}}"], "path": [".well-known","openid-configuration"] } }
+        },
+        {
+          "name": "JWKS",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/.well-known/jwks", "host": ["{{baseUrl}}"], "path": [".well-known","jwks"] } }
+        },
+        {
+          "name": "Authorize (PKCE) — browser only",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/connect/authorize?response_type=code&client_id=sheba-portal&redirect_uri=https://localhost:4200/callback&scope=openid profile&code_challenge=REPLACE_WITH_S256_CHALLENGE&code_challenge_method=S256&state=REPLACE_WITH_STATE",
+              "host": ["{{baseUrl}}"], "path": ["connect","authorize"],
+              "query": [
+                { "key": "response_type", "value": "code" },
+                { "key": "client_id", "value": "sheba-portal" },
+                { "key": "redirect_uri", "value": "https://localhost:4200/callback" },
+                { "key": "scope", "value": "openid profile" },
+                { "key": "code_challenge", "value": "REPLACE_WITH_S256_CHALLENGE" },
+                { "key": "code_challenge_method", "value": "S256" },
+                { "key": "state", "value": "REPLACE_WITH_STATE" }
+              ]
+            },
+            "description": "Not directly testable in Postman (302 chain + cookie session). See frontend-auth.md §11."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Identity Requests",
+      "item": [
+        {
+          "name": "List Identity Requests",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/identity-requests?status=Pending&page=1&pageSize=20", "host": ["{{baseUrl}}"], "path": ["api","admin","identity-requests"],
+              "query": [ { "key": "status", "value": "Pending" }, { "key": "page", "value": "1" }, { "key": "pageSize", "value": "20" } ] }
+          }
+        },
+        {
+          "name": "Approve Identity Request",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"notes\": \"Verified against registry snapshot.\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/identity-requests/{{request_id}}/approve", "host": ["{{baseUrl}}"], "path": ["api","admin","identity-requests","{{request_id}}","approve"] }
+          }
+        },
+        {
+          "name": "Reject Identity Request",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"rejectionReason\": \"NID photo unreadable\",\n  \"notes\": null\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/identity-requests/{{request_id}}/reject", "host": ["{{baseUrl}}"], "path": ["api","admin","identity-requests","{{request_id}}","reject"] }
+          }
+        },
+        {
+          "name": "Get Account by ID",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/accounts/{{account_id}}", "host": ["{{baseUrl}}"], "path": ["api","admin","accounts","{{account_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Users & MFA",
+      "item": [
+        {
+          "name": "Create Admin User",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"employeeId\": \"EMP1024\",\n  \"email\": \"manager@moi.gov\",\n  \"fullName\": \"Layla Al-Muhandis\",\n  \"role\": \"MinistryManager\",\n  \"password\": \"T3mp!Passw0rd\",\n  \"department\": \"MOI Digital Services\",\n  \"ministryId\": \"{{ministry_id}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/admin-users", "host": ["{{baseUrl}}"], "path": ["api","admin","admin-users"] }
+          }
+        },
+        {
+          "name": "MFA — Enroll",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/mfa/enroll", "host": ["{{baseUrl}}"], "path": ["api","admin","mfa","enroll"] }
+          }
+        },
+        {
+          "name": "MFA — Verify",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"totpCode\": \"123456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/mfa/verify", "host": ["{{baseUrl}}"], "path": ["api","admin","mfa","verify"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Relying Parties",
+      "item": [
+        {
+          "name": "List Relying Parties",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/relying-parties", "host": ["{{baseUrl}}"], "path": ["api","admin","relying-parties"] }
+          }
+        },
+        {
+          "name": "Get Relying Party",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/relying-parties/sheba-portal", "host": ["{{baseUrl}}"], "path": ["api","admin","relying-parties","sheba-portal"] }
+          }
+        },
+        {
+          "name": "Register Relying Party",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"clientId\": \"moi-portal\",\n  \"displayName\": \"MOI Citizen Portal\",\n  \"clientType\": \"confidential\",\n  \"clientSecret\": null,\n  \"redirectUris\": [\"https://moi.gov.ye/callback\"],\n  \"postLogoutRedirectUris\": [\"https://moi.gov.ye\"],\n  \"scopes\": [\"openid\", \"profile\", \"civil_data\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/relying-parties", "host": ["{{baseUrl}}"], "path": ["api","admin","relying-parties"] }
+          }
+        },
+        {
+          "name": "Rotate Relying Party Secret",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/relying-parties/moi-portal/rotate-secret", "host": ["{{baseUrl}}"], "path": ["api","admin","relying-parties","moi-portal","rotate-secret"] }
+          }
+        },
+        {
+          "name": "Delete Relying Party",
+          "request": {
+            "method": "DELETE",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/relying-parties/moi-portal", "host": ["{{baseUrl}}"], "path": ["api","admin","relying-parties","moi-portal"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ministry",
+      "item": [
+        {
+          "name": "List Ministries",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/ministry?includeInactive=false", "host": ["{{baseUrl}}"], "path": ["api","ministry"], "query": [ { "key": "includeInactive", "value": "false" } ] }
+          }
+        },
+        {
+          "name": "Get Ministry by ID",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}"] }
+          }
+        },
+        {
+          "name": "Create Ministry",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"MOI\",\n  \"nameAr\": \"وزارة الداخلية\",\n  \"nameEn\": \"Ministry of Interior\",\n  \"parentMinistryId\": null,\n  \"descriptionAr\": null,\n  \"descriptionEn\": null,\n  \"contactEmail\": \"it@moi.gov\",\n  \"contactPhone\": \"+967771234567\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry", "host": ["{{baseUrl}}"], "path": ["api","ministry"] }
+          }
+        },
+        {
+          "name": "Update Ministry",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"nameAr\": \"وزارة الداخلية\",\n  \"nameEn\": \"Ministry of Interior\",\n  \"descriptionAr\": null,\n  \"descriptionEn\": null,\n  \"logoUrl\": null,\n  \"websiteUrl\": null,\n  \"contactEmail\": \"it@moi.gov\",\n  \"contactPhone\": \"+967771234567\",\n  \"addressAr\": null,\n  \"addressEn\": null,\n  \"displayOrder\": 0,\n  \"isActive\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}"] }
+          }
+        },
+        {
+          "name": "Set Ministry Auth Config",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"prod\",\n  \"authType\": \"Oidc\",\n  \"baseUrl\": \"https://api.moi.gov\",\n  \"isDefault\": true,\n  \"healthCheckPath\": \"/health\",\n  \"timeoutSeconds\": 30,\n  \"retryCount\": 3,\n  \"oidcTokenEndpoint\": \"https://idp.moi.gov/connect/token\",\n  \"oidcClientId\": \"sheba\",\n  \"oidcClientSecret\": \"secret\",\n  \"oidcScope\": \"citizen.read\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}/auth-config", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}","auth-config"] }
+          }
+        },
+        {
+          "name": "Test Ministry Connection",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"authConfigId\": \"REPLACE_WITH_AUTH_CONFIG_ID\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}/test-connection", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}","test-connection"] }
+          }
+        },
+        {
+          "name": "Register Ministry Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"LOOKUP\",\n  \"nameAr\": \"استعلام مواطن\",\n  \"nameEn\": \"Citizen Lookup\",\n  \"httpMethod\": \"GET\",\n  \"pathTemplate\": \"/citizens/{nid}\",\n  \"type\": \"DataQuery\",\n  \"authConfigId\": null,\n  \"descriptionAr\": null,\n  \"descriptionEn\": null,\n  \"timeoutSeconds\": 30,\n  \"rateLimitPerMinute\": null,\n  \"requiresCitizenConsent\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}/endpoints", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}","endpoints"] }
+          }
+        },
+        {
+          "name": "Register Ministry Webhook",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"eventType\": \"passport.issued\",\n  \"shebaWebhookPath\": \"/api/webhooks/ministry/{{ministry_id}}\",\n  \"signingSecret\": \"plaintext-secret-here\",\n  \"endpointId\": null\n}" },
+            "url": { "raw": "{{baseUrl}}/api/ministry/{{ministry_id}}/webhooks", "host": ["{{baseUrl}}"], "path": ["api","ministry","{{ministry_id}}","webhooks"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Catalog (public)",
+      "item": [
+        {
+          "name": "Get Service Catalog",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/services?includeInactive=false", "host": ["{{baseUrl}}"], "path": ["api","services"], "query": [ { "key": "includeInactive", "value": "false" } ] } }
+        },
+        {
+          "name": "Get Service by ID",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/services/{{service_id}}", "host": ["{{baseUrl}}"], "path": ["api","services","{{service_id}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Service Catalog",
+      "item": [
+        {
+          "name": "Create Service Category",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"nameAr\": \"وثائق هوية\",\n  \"nameEn\": \"Identity Documents\",\n  \"parentId\": null,\n  \"iconUrl\": null,\n  \"displayOrder\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/services/categories", "host": ["{{baseUrl}}"], "path": ["api","admin","services","categories"] }
+          }
+        },
+        {
+          "name": "Create Service Definition",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"categoryId\": \"REPLACE_WITH_CATEGORY_ID\",\n  \"ministryId\": \"{{ministry_id}}\",\n  \"code\": \"PASSPORT_NEW\",\n  \"nameAr\": \"طلب جواز سفر جديد\",\n  \"nameEn\": \"New Passport Application\",\n  \"descriptionAr\": null,\n  \"descriptionEn\": null,\n  \"requiredLoa\": 2,\n  \"averageDays\": 14,\n  \"formSchemaJson\": \"{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\\\"fullNameEn\\\"],\\\"properties\\\":{\\\"fullNameEn\\\":{\\\"type\\\":\\\"string\\\"}}}\",\n  \"uiSchemaJson\": null\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/services", "host": ["{{baseUrl}}"], "path": ["api","admin","services"] }
+          }
+        },
+        {
+          "name": "Update Service Definition",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"nameAr\": \"طلب جواز سفر جديد\",\n  \"nameEn\": \"New Passport Application\",\n  \"descriptionAr\": null,\n  \"descriptionEn\": null,\n  \"requiredLoa\": 2,\n  \"requiresAppointment\": false,\n  \"isOnline\": true,\n  \"averageDays\": 14,\n  \"displayOrder\": 0,\n  \"publish\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/services/{{service_id}}", "host": ["{{baseUrl}}"], "path": ["api","admin","services","{{service_id}}"] }
+          }
+        },
+        {
+          "name": "Set Service Fee",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"feeType\": \"BASE\",\n  \"nameAr\": \"رسوم إصدار\",\n  \"nameEn\": \"Issuance Fee\",\n  \"amount\": 25000,\n  \"currency\": \"YER\",\n  \"isMandatory\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/services/{{service_id}}/fees", "host": ["{{baseUrl}}"], "path": ["api","admin","services","{{service_id}}","fees"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Requests",
+      "item": [
+        {
+          "name": "Submit Service Request",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"serviceId\": \"{{service_id}}\",\n  \"formDataJson\": \"{\\\"fullNameEn\\\":\\\"Ahmed\\\"}\",\n  \"priority\": \"NORMAL\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/requests", "host": ["{{baseUrl}}"], "path": ["api","requests"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) { const b = pm.response.json(); pm.collectionVariables.set('request_id', b.data.requestId); }"
+          ] } } ]
+        },
+        {
+          "name": "Get My Requests",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/requests/mine", "host": ["{{baseUrl}}"], "path": ["api","requests","mine"] }
+          }
+        },
+        {
+          "name": "Get Request by ID",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/requests/{{request_id}}", "host": ["{{baseUrl}}"], "path": ["api","requests","{{request_id}}"] }
+          }
+        },
+        {
+          "name": "Execute Next Step (admin)",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/requests/{{request_id}}/execute-next", "host": ["{{baseUrl}}"], "path": ["api","requests","{{request_id}}","execute-next"] }
+          }
+        },
+        {
+          "name": "Mark Payment Complete (mock)",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/requests/payments/REPLACE_WITH_PAYMENT_ORDER_ID/complete", "host": ["{{baseUrl}}"], "path": ["api","requests","payments","REPLACE_WITH_PAYMENT_ORDER_ID","complete"] }
+          }
+        },
+        {
+          "name": "Admin — List All Requests",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/requests?page=1&pageSize=20", "host": ["{{baseUrl}}"], "path": ["api","admin","requests"], "query": [ { "key": "status", "value": "Processing", "disabled": true }, { "key": "page", "value": "1" }, { "key": "pageSize", "value": "20" } ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "file", "type": "file", "src": [] },
+              { "key": "documentType", "value": "PHOTO", "type": "text" }
+            ] },
+            "url": { "raw": "{{baseUrl}}/api/documents", "host": ["{{baseUrl}}"], "path": ["api","documents"] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) { const b = pm.response.json(); pm.collectionVariables.set('document_id', b.data.documentId); }"
+          ] } } ]
+        },
+        {
+          "name": "List My Documents",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/documents/mine", "host": ["{{baseUrl}}"], "path": ["api","documents","mine"] }
+          }
+        },
+        {
+          "name": "Get Download URL",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/documents/{{document_id}}/download-url", "host": ["{{baseUrl}}"], "path": ["api","documents","{{document_id}}","download-url"] }
+          }
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/documents/{{document_id}}", "host": ["{{baseUrl}}"], "path": ["api","documents","{{document_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Get My Credentials",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/wallet/credentials", "host": ["{{baseUrl}}"], "path": ["api","wallet","credentials"] }
+          }
+        },
+        {
+          "name": "Admin — Force-Issue Credential",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/admin/wallet/credentials/issue", "host": ["{{baseUrl}}"], "path": ["api","admin","wallet","credentials","issue"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Analytics & Reports",
+      "item": [
+        {
+          "name": "KPI Summary",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/analytics/kpis", "host": ["{{baseUrl}}"], "path": ["api","admin","analytics","kpis"] }
+          }
+        },
+        {
+          "name": "Registration Trends",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/analytics/trends/registrations?days=30", "host": ["{{baseUrl}}"], "path": ["api","admin","analytics","trends","registrations"], "query": [ { "key": "days", "value": "30" } ] }
+          }
+        },
+        {
+          "name": "Service Request Trends",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/analytics/trends/service-requests?days=30", "host": ["{{baseUrl}}"], "path": ["api","admin","analytics","trends","service-requests"], "query": [ { "key": "days", "value": "30" } ] }
+          }
+        },
+        {
+          "name": "Identity Requests Report (PDF/Excel)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/reports/identity-requests?from=2026-07-01&to=2026-07-18&format=pdf", "host": ["{{baseUrl}}"], "path": ["api","admin","reports","identity-requests"], "query": [ { "key": "from", "value": "2026-07-01" }, { "key": "to", "value": "2026-07-18" }, { "key": "format", "value": "pdf" } ] }
+          }
+        },
+        {
+          "name": "Service Requests Report (Excel)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/reports/service-requests?from=2026-07-01&to=2026-07-18", "host": ["{{baseUrl}}"], "path": ["api","admin","reports","service-requests"], "query": [ { "key": "from", "value": "2026-07-01" }, { "key": "to", "value": "2026-07-18" } ] }
+          }
+        },
+        {
+          "name": "Audit Export (CSV)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/audit/export?from=2026-07-01&to=2026-07-18&type=registrations", "host": ["{{baseUrl}}"], "path": ["api","admin","audit","export"], "query": [ { "key": "from", "value": "2026-07-01" }, { "key": "to", "value": "2026-07-18" }, { "key": "type", "value": "registrations" } ] }
+          }
+        },
+        {
+          "name": "Audit Log",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/admin/audit?page=1&pageSize=25", "host": ["{{baseUrl}}"], "path": ["api","admin","audit"], "query": [ { "key": "page", "value": "1" }, { "key": "pageSize", "value": "25" } ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (server-to-server, reference only)",
+      "item": [
+        {
+          "name": "Ministry Webhook Receiver",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Sheba-Event", "value": "passport.issued" },
+              { "key": "X-Sheba-Signature", "value": "REPLACE_WITH_HMAC_SHA256_HEX" },
+              { "key": "X-Sheba-Timestamp", "value": "REPLACE_WITH_UNIX_SECONDS" },
+              { "key": "X-Sheba-Delivery-Id", "value": "REPLACE_WITH_UUID" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"passportNumber\": \"P1234567\",\n  \"citizenNid\": \"1000000001\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/webhooks/ministry/{{ministry_id}}", "host": ["{{baseUrl}}"], "path": ["api","webhooks","ministry","{{ministry_id}}"] },
+            "description": "Not a frontend surface — HMAC-verified, server-to-server only. Included for completeness."
+          }
+        }
+      ]
+    }
+  ]
+}

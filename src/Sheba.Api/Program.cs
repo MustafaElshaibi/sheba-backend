@@ -282,6 +282,7 @@ try
     {
         await app.MigrateAllModulesAsync();
         await IdentityModule.SeedIdentityAsync(app);
+        await MinistryModule.SeedMinistriesAsync(app); // must run before the service catalog (T-MIN-1)
         await ServiceRequestModule.SeedServiceCatalogAsync(app);
     }
     catch (Exception dbEx)

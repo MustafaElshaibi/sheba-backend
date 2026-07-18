@@ -1,0 +1,15 @@
+meta {
+  name: Get My Requests
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/requests/mine
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Request LoA Upgrade
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/identity/loa/upgrade
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "targetLevel": 2
+  }
+}

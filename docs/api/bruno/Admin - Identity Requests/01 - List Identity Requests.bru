@@ -1,0 +1,21 @@
+meta {
+  name: List Identity Requests
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/admin/identity-requests?status=Pending&page=1&pageSize=20
+  body: none
+  auth: bearer
+}
+
+params:query {
+  status: Pending
+  page: 1
+  pageSize: 20
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}

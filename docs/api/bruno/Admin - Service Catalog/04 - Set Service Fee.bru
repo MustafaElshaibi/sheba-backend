@@ -1,0 +1,30 @@
+meta {
+  name: Set Service Fee
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/admin/services/{{service_id}}/fees
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "feeType": "BASE",
+    "nameAr": "رسوم إصدار",
+    "nameEn": "Issuance Fee",
+    "amount": 25000,
+    "currency": "YER",
+    "isMandatory": true
+  }
+}

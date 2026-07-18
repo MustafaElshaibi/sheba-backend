@@ -1,0 +1,19 @@
+meta {
+  name: Service Request Trends
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/admin/analytics/trends/service-requests?days=30
+  body: none
+  auth: bearer
+}
+
+params:query {
+  days: 30
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}

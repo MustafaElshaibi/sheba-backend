@@ -1,0 +1,31 @@
+meta {
+  name: Admin - List All Requests
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/admin/requests?page=1&pageSize=20
+  body: none
+  auth: bearer
+}
+
+params:query {
+  ~status: Processing
+  ~serviceId:
+  ~ministryId:
+  ~fromDate: 2026-07-01
+  ~toDate: 2026-07-18
+  page: 1
+  pageSize: 20
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  MinistryManager. T-AUTH-1: a MinistryManager's own ministry_id always overrides the
+  ministryId query param, even when the param is omitted (which would otherwise mean "all
+  ministries"). SuperAdmin is unrestricted.
+}

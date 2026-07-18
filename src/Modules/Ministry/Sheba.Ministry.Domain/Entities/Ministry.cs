@@ -45,7 +45,8 @@ public sealed class Ministry : BaseEntity
         string nameAr,
         string nameEn,
         Guid? parentMinistryId = null,
-        int parentDepthLevel = -1)
+        int parentDepthLevel = -1,
+        Guid? id = null)
     {
         if (string.IsNullOrWhiteSpace(code))
             throw new DomainException("Ministry code is required.");
@@ -54,7 +55,7 @@ public sealed class Ministry : BaseEntity
         if (string.IsNullOrWhiteSpace(nameEn))
             throw new DomainException("English name is required.");
 
-        return new Ministry
+        var ministry = new Ministry
         {
             Code = code.Trim().ToUpperInvariant(),
             NameAr = nameAr.Trim(),
@@ -62,6 +63,12 @@ public sealed class Ministry : BaseEntity
             ParentMinistryId = parentMinistryId,
             DepthLevel = parentMinistryId.HasValue ? parentDepthLevel + 1 : 0
         };
+        // Seeding needs deterministic ids matching the service catalog's hardcoded ministry GUIDs
+        // (T-MIN-1) — everywhere else, the BaseEntity default (a fresh Guid) is used.
+        if (id.HasValue)
+            ministry.Id = id.Value;
+
+        return ministry;
     }
 
     public void Update(

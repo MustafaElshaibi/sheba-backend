@@ -1,0 +1,20 @@
+meta {
+  name: Get Download URL
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/documents/{{document_id}}/download-url
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Returns a presigned MinIO URL valid 15 minutes. Owner or admin only — non-owners get 404
+  (not 403), so document existence never leaks to a non-owner.
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Authorize (PKCE) - browser only
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/connect/authorize?response_type=code&client_id=sheba-portal&redirect_uri=https://localhost:4200/callback&scope=openid profile&code_challenge=REPLACE_WITH_S256_CHALLENGE&code_challenge_method=S256&state=REPLACE_WITH_STATE
+  body: none
+  auth: none
+}
+
+params:query {
+  response_type: code
+  client_id: sheba-portal
+  redirect_uri: https://localhost:4200/callback
+  scope: openid profile
+  code_challenge: REPLACE_WITH_S256_CHALLENGE
+  code_challenge_method: S256
+  state: REPLACE_WITH_STATE
+}
+
+docs {
+  Not directly testable in an HTTP client — this is a 302 redirect chain that depends on a
+  browser session cookie (sheba_session). Use a real browser + a PKCE OIDC library.
+  See docs/frontend-auth.md §11.
+}

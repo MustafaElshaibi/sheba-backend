@@ -1,0 +1,25 @@
+meta {
+  name: Test Ministry Connection
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}/test-connection
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "authConfigId": "REPLACE_WITH_AUTH_CONFIG_ID"
+  }
+}

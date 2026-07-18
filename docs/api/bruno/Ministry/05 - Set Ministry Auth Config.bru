@@ -1,0 +1,40 @@
+meta {
+  name: Set Ministry Auth Config
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}/auth-config
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "prod",
+    "authType": "Oidc",
+    "baseUrl": "https://api.moi.gov",
+    "isDefault": true,
+    "healthCheckPath": "/health",
+    "timeoutSeconds": 30,
+    "retryCount": 3,
+    "oidcTokenEndpoint": "https://idp.moi.gov/connect/token",
+    "oidcClientId": "sheba",
+    "oidcClientSecret": "secret",
+    "oidcScope": "citizen.read"
+  }
+}
+
+docs {
+  Credential fields (oidcClientSecret, apiKey, bearerToken, basicPassword, etc. depending on
+  authType) are AES-256-GCM encrypted at rest and never returned in any response.
+}

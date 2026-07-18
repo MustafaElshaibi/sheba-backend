@@ -1,0 +1,25 @@
+meta {
+  name: Identity Requests Report (PDF or Excel)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/admin/reports/identity-requests?from=2026-07-01&to=2026-07-18&format=pdf
+  body: none
+  auth: bearer
+}
+
+params:query {
+  from: 2026-07-01
+  to: 2026-07-18
+  format: pdf
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  format=pdf (default) or format=excel. Returns a binary file, not a JSend envelope.
+}

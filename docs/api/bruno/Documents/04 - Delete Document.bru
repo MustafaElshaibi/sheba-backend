@@ -1,0 +1,19 @@
+meta {
+  name: Delete Document
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/documents/{{document_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Owner or admin only. Removes the MinIO object and soft-deletes the metadata row.
+}

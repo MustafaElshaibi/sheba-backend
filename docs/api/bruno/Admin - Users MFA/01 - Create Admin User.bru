@@ -1,0 +1,35 @@
+meta {
+  name: Create Admin User
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/admin/admin-users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "employeeId": "EMP1024",
+    "email": "manager@moi.gov",
+    "fullName": "Layla Al-Muhandis",
+    "role": "MinistryManager",
+    "password": "T3mp!Passw0rd",
+    "department": "MOI Digital Services",
+    "ministryId": "{{ministry_id}}"
+  }
+}
+
+docs {
+  SuperAdminOnly. A MinistryManager role REQUIRES ministryId; every other role must omit it.
+}

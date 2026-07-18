@@ -1,0 +1,22 @@
+meta {
+  name: Login (step 2 - verify OTP, no tokens)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/identity/login/verify-otp
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "accountId": "{{account_id}}",
+    "otp": "123456"
+  }
+}

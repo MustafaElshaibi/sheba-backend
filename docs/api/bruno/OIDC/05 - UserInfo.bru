@@ -1,0 +1,15 @@
+meta {
+  name: UserInfo
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/connect/userinfo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Sheba.Ministry.Domain.Entities;
 using Sheba.Ministry.Domain.Interfaces;
 using Sheba.Shared.Kernel.Interfaces;
+using StackExchange.Redis;
 
 namespace Sheba.Ministry.Infrastructure.Adapters;
 
@@ -18,6 +19,7 @@ public sealed class MinistryCallPortAdapter(
     IMinistryRepository ministryRepo,
     IEnumerable<IMinistryAuthAdapter> authAdapters,
     IHttpClientFactory httpClientFactory,
+    IConnectionMultiplexer redis,
     ILogger<MinistryCallPortAdapter> logger
 ) : IMinistryCallPort
 {
@@ -27,6 +29,16 @@ public sealed class MinistryCallPortAdapter(
         var endpoint = await ministryRepo.GetEndpointByIdAsync(endpointId, ct);
         if (endpoint is null)
             return new MinistryCallResult(false, null, 0, null, $"Ministry endpoint {endpointId} not found.");
+
+        if (endpoint.RateLimitPerMinute.HasValue &&
+            await IsRateLimitedAsync(endpointId, endpoint.RateLimitPerMinute.Value))
+        {
+            logger.LogWarning(
+                "[MinistryCall] Endpoint {EndpointId} deferred — rate limit {Limit}/min exceeded",
+                endpointId, endpoint.RateLimitPerMinute.Value);
+            return new MinistryCallResult(
+                false, null, 0, null, "Ministry endpoint rate limit exceeded — deferred.", RateLimited: true);
+        }
 
         MinistryAuthConfig? authConfig = null;
         MinistryAuthCredential? credential = null;

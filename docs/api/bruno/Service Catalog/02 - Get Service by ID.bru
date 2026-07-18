@@ -1,0 +1,15 @@
+meta {
+  name: Get Service by ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/services/{{service_id}}
+  body: none
+  auth: none
+}
+
+docs {
+  Public, anonymous. 404 (plain, not JSend) if not found or unpublished.
+}

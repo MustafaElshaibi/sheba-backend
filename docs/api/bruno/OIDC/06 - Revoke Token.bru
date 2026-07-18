@@ -1,0 +1,21 @@
+meta {
+  name: Revoke Token
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/connect/revoke
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  token: {{refresh_token}}
+  token_type_hint: refresh_token
+  client_id: sheba-portal
+}

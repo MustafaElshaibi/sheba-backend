@@ -1,0 +1,24 @@
+meta {
+  name: Service Requests Report (Excel)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/admin/reports/service-requests?from=2026-07-01&to=2026-07-18
+  body: none
+  auth: bearer
+}
+
+params:query {
+  from: 2026-07-01
+  to: 2026-07-18
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  Always Excel (.xlsx). Binary response, not a JSend envelope.
+}

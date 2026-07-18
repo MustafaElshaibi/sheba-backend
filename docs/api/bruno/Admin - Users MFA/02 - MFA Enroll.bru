@@ -1,0 +1,19 @@
+meta {
+  name: MFA - Enroll
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/admin/mfa/enroll
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  Step 1 of TOTP enrollment. Returns { secret, provisioningUri }. Unconfirmed until /verify.
+}

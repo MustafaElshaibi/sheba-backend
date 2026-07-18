@@ -1,0 +1,36 @@
+meta {
+  name: Update Ministry
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nameAr": "وزارة الداخلية",
+    "nameEn": "Ministry of Interior",
+    "descriptionAr": null,
+    "descriptionEn": null,
+    "logoUrl": null,
+    "websiteUrl": null,
+    "contactEmail": "it@moi.gov",
+    "contactPhone": "+967771234567",
+    "addressAr": null,
+    "addressEn": null,
+    "displayOrder": 0,
+    "isActive": true
+  }
+}

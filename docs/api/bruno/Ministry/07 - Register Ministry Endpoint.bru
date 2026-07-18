@@ -1,0 +1,36 @@
+meta {
+  name: Register Ministry Endpoint
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}/endpoints
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "LOOKUP",
+    "nameAr": "استعلام مواطن",
+    "nameEn": "Citizen Lookup",
+    "httpMethod": "GET",
+    "pathTemplate": "/citizens/{nid}",
+    "type": "DataQuery",
+    "authConfigId": null,
+    "descriptionAr": null,
+    "descriptionEn": null,
+    "timeoutSeconds": 30,
+    "rateLimitPerMinute": null,
+    "requiresCitizenConsent": false
+  }
+}

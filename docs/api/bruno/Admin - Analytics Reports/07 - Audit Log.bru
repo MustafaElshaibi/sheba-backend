@@ -1,0 +1,31 @@
+meta {
+  name: Audit Log
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/admin/audit?page=1&pageSize=25
+  body: none
+  auth: bearer
+}
+
+params:query {
+  ~actorId:
+  ~entityType:
+  ~action:
+  ~from: 2026-07-01
+  ~to: 2026-07-18
+  page: 1
+  pageSize: 25
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  Auditor policy (SuperAdmin or Auditor role). Paginated, filterable append-only audit_events
+  log. Route is /api/admin/audit (module map comment says /api/audit — verified route is
+  /api/admin/audit in AuditModule.cs).
+}

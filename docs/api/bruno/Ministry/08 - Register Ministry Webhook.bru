@@ -1,0 +1,33 @@
+meta {
+  name: Register Ministry Webhook
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}/webhooks
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "eventType": "passport.issued",
+    "shebaWebhookPath": "/api/webhooks/ministry/{{ministry_id}}",
+    "signingSecret": "plaintext-secret-here",
+    "endpointId": null
+  }
+}
+
+docs {
+  signingSecret is the HMAC key the ministry will sign X-Sheba-Signature with; it is
+  AES-256-GCM encrypted at rest and never returned again after this call.
+}

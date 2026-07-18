@@ -1,0 +1,27 @@
+meta {
+  name: Audit Export (CSV)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/admin/audit/export?from=2026-07-01&to=2026-07-18&type=registrations
+  body: none
+  auth: bearer
+}
+
+params:query {
+  from: 2026-07-01
+  to: 2026-07-18
+  type: registrations
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  type=registrations (default) or type=service-requests. Despite the route name this exports
+  analytics data, not the append-only audit_events log — that is GET /api/admin/audit below.
+  Binary CSV response, not a JSend envelope.
+}

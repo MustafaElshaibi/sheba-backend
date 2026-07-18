@@ -194,4 +194,43 @@ public static class MinistryModule
 
     /// <summary>Body for the test-connection endpoint.</summary>
     public sealed record TestConnectionBody(Guid AuthConfigId);
+
+    /// <summary>
+    /// Seeds the five demo ministries referenced by ServiceRequestModule.SeedServiceCatalogAsync's
+    /// hardcoded GUIDs (T-MIN-1). Must run before that seeder so seeded services resolve a real
+    /// ministry. Idempotent — skips if any ministry already exists.
+    /// </summary>
+    public static async Task SeedMinistriesAsync(WebApplication app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Persistence.MinistryDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Persistence.MinistryDbContext>>();
+
+        if (await db.Ministries.AnyAsync())
+        {
+            logger.LogDebug("[MinistryModule] Ministries already seeded — skipping.");
+            return;
+        }
+
+        logger.LogInformation("[MinistryModule] Seeding demo ministries...");
+
+        // Same fixed GUIDs the service catalog seeder hardcodes (ServiceRequestModule.cs).
+        var seeds = new[]
+        {
+            (Id: Guid.Parse("00000000-0000-0000-0001-000000000001"), Code: "MOI",  NameAr: "وزارة الداخلية",   NameEn: "Ministry of Interior"),
+            (Id: Guid.Parse("00000000-0000-0000-0001-000000000002"), Code: "MOJ",  NameAr: "وزارة العدل",       NameEn: "Ministry of Justice"),
+            (Id: Guid.Parse("00000000-0000-0000-0001-000000000003"), Code: "MOH",  NameAr: "وزارة الصحة",       NameEn: "Ministry of Health"),
+            (Id: Guid.Parse("00000000-0000-0000-0001-000000000004"), Code: "MOT",  NameAr: "وزارة النقل",       NameEn: "Ministry of Transport"),
+            (Id: Guid.Parse("00000000-0000-0000-0001-000000000005"), Code: "MOCI", NameAr: "وزارة التجارة والصناعة", NameEn: "Ministry of Commerce and Industry"),
+        };
+
+        foreach (var seed in seeds)
+        {
+            var ministry = Domain.Entities.Ministry.Create(seed.Code, seed.NameAr, seed.NameEn, id: seed.Id);
+            await db.Ministries.AddAsync(ministry);
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("[MinistryModule] Seeded {Count} ministries.", seeds.Length);
+    }
 }

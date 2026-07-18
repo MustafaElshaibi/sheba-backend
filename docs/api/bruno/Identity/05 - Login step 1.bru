@@ -1,0 +1,28 @@
+meta {
+  name: Login (step 1 - dispatch OTP)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/identity/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "usernameOrNid": "ahmed.alyemeni",
+    "password": "Str0ng!Pass"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("account_id", res.getBody().data.accountId);
+  }
+}

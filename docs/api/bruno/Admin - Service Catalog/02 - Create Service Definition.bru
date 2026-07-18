@@ -1,0 +1,41 @@
+meta {
+  name: Create Service Definition
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/admin/services
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "categoryId": "REPLACE_WITH_CATEGORY_ID",
+    "ministryId": "{{ministry_id}}",
+    "code": "PASSPORT_NEW",
+    "nameAr": "طلب جواز سفر جديد",
+    "nameEn": "New Passport Application",
+    "descriptionAr": null,
+    "descriptionEn": null,
+    "requiredLoa": 2,
+    "averageDays": 14,
+    "formSchemaJson": "{\"type\":\"object\",\"required\":[\"fullNameEn\"],\"properties\":{\"fullNameEn\":{\"type\":\"string\"}}}",
+    "uiSchemaJson": null
+  }
+}
+
+docs {
+  MinistryManager scoping (T-AUTH-1): if the caller's token carries ministry_id, the server
+  overrides ministryId in the body with the caller's own ministry — you cannot create a
+  service for another ministry as a MinistryManager. Starts unpublished.
+}

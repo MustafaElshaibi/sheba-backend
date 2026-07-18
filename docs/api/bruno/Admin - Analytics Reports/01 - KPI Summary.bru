@@ -1,0 +1,19 @@
+meta {
+  name: KPI Summary
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/admin/analytics/kpis
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  AnyAdmin. Ministry-scoped automatically when the caller's token carries ministry_id.
+}

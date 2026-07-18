@@ -1,0 +1,25 @@
+meta {
+  name: Complete Registration
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/identity/complete-registration
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "accountId": "{{account_id}}",
+    "username": "ahmed.alyemeni",
+    "email": "ahmed@example.com",
+    "password": "Str0ng!Pass",
+    "confirmPassword": "Str0ng!Pass"
+  }
+}

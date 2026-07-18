@@ -1,0 +1,39 @@
+meta {
+  name: Update Service Definition
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/admin/services/{{service_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nameAr": "طلب جواز سفر جديد",
+    "nameEn": "New Passport Application",
+    "descriptionAr": null,
+    "descriptionEn": null,
+    "requiredLoa": 2,
+    "requiresAppointment": false,
+    "isOnline": true,
+    "averageDays": 14,
+    "displayOrder": 0,
+    "publish": true
+  }
+}
+
+docs {
+  Set publish=true to publish, false to depublish. Publishing requires a FormSchema to already
+  exist on the service.
+}

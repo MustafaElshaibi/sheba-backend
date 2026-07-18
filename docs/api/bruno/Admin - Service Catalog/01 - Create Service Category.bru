@@ -1,0 +1,29 @@
+meta {
+  name: Create Service Category
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/admin/services/categories
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nameAr": "وثائق هوية",
+    "nameEn": "Identity Documents",
+    "parentId": null,
+    "iconUrl": null,
+    "displayOrder": 1
+  }
+}

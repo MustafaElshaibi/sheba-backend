@@ -1,0 +1,20 @@
+meta {
+  name: Get Ministry by ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/ministry/{{ministry_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+docs {
+  Guarded by MinistryOwnershipFilter — a MinistryManager token may only fetch their own
+  ministry_id; SuperAdmin (no ministry_id claim) is unrestricted.
+}

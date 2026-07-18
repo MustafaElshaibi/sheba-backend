@@ -1,0 +1,34 @@
+meta {
+  name: Token - Citizen (national_id_otp)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  grant_type: urn:sheba:grant:national_id_otp
+  account_id: {{account_id}}
+  otp: 123456
+  client_id: sheba-portal
+  scope: openid profile email offline_access
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("access_token", res.getBody().access_token);
+    bru.setVar("refresh_token", res.getBody().refresh_token);
+  }
+}
+
+docs {
+  Response is OAuth JSON, NOT JSend: { access_token, token_type, expires_in, id_token, refresh_token, scope }
+}

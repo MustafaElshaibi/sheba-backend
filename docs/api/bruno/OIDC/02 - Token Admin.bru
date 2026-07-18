@@ -1,0 +1,38 @@
+meta {
+  name: Token - Admin (admin_password)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/connect/token
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  grant_type: urn:sheba:grant:admin_password
+  employee_id_or_email: admin@sheba.gov
+  password: Admin@123
+  client_id: sheba-admin
+  client_secret: sheba-admin-dev-secret
+  scope: openid profile admin_api
+  ~mfa_code: 123456
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("admin_access_token", res.getBody().access_token);
+    bru.setVar("admin_refresh_token", res.getBody().refresh_token);
+  }
+}
+
+docs {
+  ~mfa_code is disabled by default (tilde prefix in Bruno). Enable and set once the seeded
+  admin has completed MFA enrollment. Missing mfa_code on an enrolled admin returns
+  400 { error: invalid_grant, error_description: "mfa_required" }.
+}

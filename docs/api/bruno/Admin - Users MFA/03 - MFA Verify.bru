@@ -1,0 +1,29 @@
+meta {
+  name: MFA - Verify
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/admin/mfa/verify
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{admin_access_token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "totpCode": "123456"
+  }
+}
+
+docs {
+  Step 2 — confirms enrollment, enables MFA, returns 10 recovery codes (shown once).
+}

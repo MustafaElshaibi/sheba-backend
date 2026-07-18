@@ -1,0 +1,28 @@
+meta {
+  name: Register Citizen
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/identity/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nationalId": "1000000001",
+    "phoneNumber": "0777000001"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("account_id", res.getBody().data.accountId);
+  }
+}
