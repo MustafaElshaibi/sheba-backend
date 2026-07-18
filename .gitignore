@@ -1,13 +1,144 @@
-﻿bin/
+﻿# =========================
+# Build Output
+# =========================
+bin/
 obj/
+out/
+dist/
+build/
+publish/
+
+# =========================
+# Node.js
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Package manager files
+.pnpm-store/
+.npm/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Framework caches
+.next/
+.nuxt/
+.svelte-kit/
+.parcel-cache/
+.vite/
+.turbo/
+.vercel/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# =========================
+# Visual Studio
+# =========================
 .vs/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / IntelliJ
 .idea/
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# =========================
+# macOS / Windows
+# =========================
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# NuGet
+# =========================
 *.nupkg
 *.snupkg
+packages/
+*.nuget.props
+*.nuget.targets
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# ASP.NET Secrets
+# =========================
 secrets.json
 appsettings.Local.json
+appsettings.Development.local.json
 
-.fake
+# =========================
+# Certificates
+# =========================
+*.pfx
+*.pem
+*.key
+*.crt
+*.cer
+
+# =========================
+# Database
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# Temporary Files
+# =========================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.orig
+
+# =========================
+# Generated Files
+# =========================
+Generated/
+wwwroot/lib/
+
+# =========================
+# Docker
+# =========================
+docker-compose.override.yml
+
+# =========================
+# Fake/Test Data
+# =========================
+.fake/
+
+# =========================
+# Misc
+# =========================
+*.cache
+.cache/
