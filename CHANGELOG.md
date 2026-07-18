@@ -7,6 +7,18 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **OTP provider failover + spend alarm hooks (T-INT-2)**: `ConsoleOtpProvider`/`TwilioOtpProvider`
+  are now keyed DI registrations, and setting `Otp:ActiveProvider = "Failover"` selects a new
+  `FailoverOtpProvider` composite that tries providers in `Otp:FailoverOrder` (default
+  `["Twilio","Console"]`) until one delivers — a provider that returns failure *or throws* is
+  treated as a failed attempt and the chain continues, so one flaky SMS gateway never blocks login.
+  Every attempt and any full-chain exhaustion is reported to a new `IOtpSpendAlarm` hook
+  (`LoggingOtpSpendAlarm` default — structured, PII-free logs an operator can alert on for
+  cost/volume spikes). Existing `"Console"`/`"Twilio"` `ActiveProvider` values are unchanged.
+
+  4 new tests (first-succeeds-short-circuits, failover-on-failure, all-fail-raises-exhausted-alarm,
+  throwing-provider-continues). Full suite: `dotnet build` clean, `dotnet test` 207/207 passing.
+
 - **Step-engine failure routing (T-SRV-4)**: `ExecuteNextStepHandler` now honors a step's
   `on_failure_step` — a failing step with a failure route jumps there (re-executing if that step is
   automated) instead of dead-ending; a failing step with no route sets the request to

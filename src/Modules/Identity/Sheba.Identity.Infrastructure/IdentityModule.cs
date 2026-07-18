@@ -102,11 +102,27 @@ public static class IdentityModule
             services.AddScoped<INationalIdProvider, HttpNationalIdProvider>();
 
         // ── 3. OTP adapter ─────────────────────────────────────────────────────
+        // Keyed registrations so the failover composite (T-INT-2) can resolve providers by name.
+        services.AddKeyedScoped<IOtpProvider, ConsoleOtpProvider>("Console");
+        services.AddKeyedScoped<IOtpProvider, TwilioOtpProvider>("Twilio");
+        services.AddScoped<IOtpSpendAlarm, LoggingOtpSpendAlarm>();
+
         var otpProvider = configuration["Otp:ActiveProvider"] ?? "Console";
-        if (otpProvider == "Console")
-            services.AddScoped<IOtpProvider, ConsoleOtpProvider>();
-        else
+        if (otpProvider == "Failover")
+        {
+            // Otp:FailoverOrder = ["Twilio","Console"] — tried in order until one delivers.
+            var order = configuration.GetSection("Otp:FailoverOrder").Get<string[]>()
+                        ?? ["Twilio", "Console"];
+            services.AddScoped<IOtpProvider>(sp => new FailoverOtpProvider(
+                sp,
+                sp.GetRequiredService<IOtpSpendAlarm>(),
+                sp.GetRequiredService<ILogger<FailoverOtpProvider>>(),
+                order));
+        }
+        else if (otpProvider == "Twilio")
             services.AddScoped<IOtpProvider, TwilioOtpProvider>();
+        else
+            services.AddScoped<IOtpProvider, ConsoleOtpProvider>();
 
         // ── 4. Named HTTP client for HttpNationalIdProvider (future-proof) ──────
         services.AddHttpClient("CivilRegistry", client =>

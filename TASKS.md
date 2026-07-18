@@ -139,7 +139,7 @@ row in known-issues §1 by the same ID.
 - [x] **T-SRV-2** Add `JsonSchema.Net` to `Directory.Packages.props`; validate service form
       submissions against `form_schema_json` server-side; JSend `fail` with per-field keys.
 - [ ] **T-INT-1** OpenCRVS `INationalIdProvider` adapter (GraphQL/REST) + contract tests.
-- [ ] **T-INT-2** OTP provider failover ordering + spend alarm hooks.
+- [x] **T-INT-2** OTP provider failover ordering + spend alarm hooks.
 - [ ] Ministry health dashboard: scheduled `TestConnectionAsync` sweep → Admin KPIs.
 - [x] **T-SRV-3** Submission gates + lifecycle integrity *(High · M · deps: T-AUTH-2 (loa claim) ·
       issue: T-SRV-3)*: enforce `RequiredLoa` (from the token's `loa` claim), eligibility, and
