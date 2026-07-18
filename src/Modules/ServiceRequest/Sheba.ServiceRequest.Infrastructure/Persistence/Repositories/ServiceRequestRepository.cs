@@ -51,6 +51,11 @@ public sealed class ServiceRequestRepository(ServiceRequestDbContext db) : IServ
 
     public async Task<RequestStepExecution?> GetActiveStepForRequestAsync(Guid requestId, CancellationToken ct = default)
         => await db.StepExecutions.Where(e => e.RequestId == requestId && e.Status == StepExecutionStatus.Running)
+            .OrderBy(e => e.StepOrder)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<RequestStepExecution?> GetStepExecutionForStepAsync(Guid requestId, int stepOrder, CancellationToken ct = default)
+        => await db.StepExecutions.Where(e => e.RequestId == requestId && e.StepOrder == stepOrder)
             .FirstOrDefaultAsync(ct);
 
     public async Task<List<RequestStepExecution>> GetStepExecutionsByRequestAsync(Guid requestId, CancellationToken ct = default)

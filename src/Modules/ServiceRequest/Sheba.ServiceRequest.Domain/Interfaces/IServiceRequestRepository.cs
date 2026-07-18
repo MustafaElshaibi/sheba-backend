@@ -26,6 +26,9 @@ public interface IServiceRequestRepository
     // Step executions
     Task<RequestStepExecution?> GetStepExecutionByIdAsync(Guid id, CancellationToken ct = default);
     Task<RequestStepExecution?> GetActiveStepForRequestAsync(Guid requestId, CancellationToken ct = default);
+    /// <summary>The execution row for a specific (request, step order), or null. T-SRV-4: the single
+    /// source of truth for whether a step has an execution — one row per executed step.</summary>
+    Task<RequestStepExecution?> GetStepExecutionForStepAsync(Guid requestId, int stepOrder, CancellationToken ct = default);
     Task<List<RequestStepExecution>> GetStepExecutionsByRequestAsync(Guid requestId, CancellationToken ct = default);
     Task AddStepExecutionAsync(RequestStepExecution execution, CancellationToken ct = default);
 

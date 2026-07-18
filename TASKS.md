@@ -149,7 +149,7 @@ row in known-issues §1 by the same ID.
       AC: an LoA-1 citizen submitting an LoA-2 service gets 422; a missing required document
       blocks submission; `Complete()` from a terminal state throws; an overdue AwaitingMinistry
       request is expired by the job.
-- [ ] **T-SRV-4** Step-engine failure routing *(Medium · M · deps: T-SRV-3 · issue: T-SRV-4)*:
+- [x] **T-SRV-4** Step-engine failure routing *(Medium · M · deps: T-SRV-3 · issue: T-SRV-4)*:
       honor `on_failure_step` on step failure (fallback: request → `ActionRequired`); unhandled
       step types fail loudly instead of silently auto-completing; single source of truth for step
       executions (drop pre-creation at submit or reuse the pre-created rows — one mechanism, not

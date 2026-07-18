@@ -91,6 +91,10 @@ public sealed class ServiceRequestEntity : BaseEntity
     public void MarkAwaitingMinistry() { EnsureNotTerminal("move to awaiting-ministry"); Status = RequestLifecycleStatus.AwaitingMinistry; Touch(); }
     public void MarkUnderReview() { EnsureNotTerminal("move to under-review"); Status = RequestLifecycleStatus.UnderReview; Touch(); }
 
+    /// <summary>T-SRV-4: a step failed with no <c>on_failure_step</c> route (or an unhandled step
+    /// type) — the request needs human intervention rather than silently completing or failing.</summary>
+    public void MarkActionRequired() { EnsureNotTerminal("flag action-required on"); Status = RequestLifecycleStatus.ActionRequired; Touch(); }
+
     public void Complete()
     {
         EnsureNotTerminal("complete");

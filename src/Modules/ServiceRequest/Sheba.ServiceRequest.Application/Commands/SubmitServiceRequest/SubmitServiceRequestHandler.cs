@@ -59,18 +59,10 @@ public sealed class SubmitServiceRequestHandler(
 
         await requestRepo.AddAsync(request, ct);
 
-        // 3. Create step executions from the service's workflow definition
-        var steps = service.WorkflowSteps.OrderBy(s => s.StepOrder).ToList();
-        if (steps.Count > 0)
-        {
-            // Create a pending execution for each workflow step
-            foreach (var step in steps)
-            {
-                var execution = RequestStepExecution.Create(
-                    request.Id, step.Id, step.StepOrder, actorType: step.Actor.ToString());
-                await requestRepo.AddStepExecutionAsync(execution, ct);
-            }
-        }
+        // 3. Step executions are NOT pre-created here (T-SRV-4): ExecuteNextStep is the single
+        // source of truth, creating exactly one execution row per step as it actually runs. The
+        // old pre-creation left every step sitting in Running at submit, making "the active step"
+        // ambiguous.
 
         // 4. Domain event (ServiceRequestSubmittedEvent) is raised inside Create()
         await requestRepo.SaveChangesAsync(ct);

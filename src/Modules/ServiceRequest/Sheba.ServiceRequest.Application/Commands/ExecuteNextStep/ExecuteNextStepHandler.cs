@@ -50,28 +50,28 @@ public sealed class ExecuteNextStepHandler(
                 Message: "All workflow steps completed.");
         }
 
-        // Find the handler for this step type
-        var handler = stepHandlers.FirstOrDefault(h => h.StepType == currentStepDef.StepType);
-        if (handler is null)
-        {
-            // Use auto-complete for unhandled step types
-            handler = stepHandlers.FirstOrDefault(h => h.StepType == WorkflowStepType.Notification);
-            if (handler is null)
-            {
-                logger.LogWarning("[ExecuteNextStep] No handler for step type {Type}", currentStepDef.StepType);
-                return new ExecuteNextStepResponse(false, request.CurrentStep, request.Status.ToString(),
-                    Message: $"No handler for step type {currentStepDef.StepType}.");
-            }
-        }
-
-        // Create or reuse step execution
-        var execution = await requestRepo.GetActiveStepForRequestAsync(request.Id, ct);
+        // Create or reuse this step's single execution row (T-SRV-4: one row per executed step).
+        var execution = await requestRepo.GetStepExecutionForStepAsync(request.Id, currentStepDef.StepOrder, ct);
         if (execution is null)
         {
             execution = RequestStepExecution.Create(
                 request.Id, currentStepDef.Id, currentStepDef.StepOrder,
                 actorType: currentStepDef.Actor.ToString());
             await requestRepo.AddStepExecutionAsync(execution, ct);
+        }
+
+        // Find the handler for this step type. T-SRV-4: an unhandled step type fails LOUDLY —
+        // marking the step Failed and the request ActionRequired — instead of silently routing to
+        // the Notification handler and auto-completing work that never actually ran.
+        var handler = stepHandlers.FirstOrDefault(h => h.StepType == currentStepDef.StepType);
+        if (handler is null)
+        {
+            logger.LogError("[ExecuteNextStep] No handler for step type {Type} — flagging ActionRequired", currentStepDef.StepType);
+            execution.MarkFailed($"No handler registered for step type {currentStepDef.StepType}.");
+            request.MarkActionRequired();
+            await requestRepo.SaveChangesAsync(ct);
+            return new ExecuteNextStepResponse(false, request.CurrentStep, request.Status.ToString(),
+                Message: $"No handler for step type {currentStepDef.StepType} — request needs attention.");
         }
 
         // Execute the step
@@ -122,6 +122,30 @@ public sealed class ExecuteNextStepHandler(
         else
         {
             execution.MarkFailed(result.ErrorMessage ?? "Unknown error", result.ResultJson);
+
+            // T-SRV-4: honor on_failure_step. If the step defines a failure route, jump there
+            // (and re-execute if that step is automated); otherwise the request needs attention.
+            var failureStep = currentStepDef.OnFailureStep is int fs
+                ? workflowSteps.FirstOrDefault(s => s.StepOrder == fs)
+                : null;
+
+            if (failureStep is not null)
+            {
+                request.AdvanceToStep(failureStep.StepOrder, RequestLifecycleStatus.Processing);
+                await requestRepo.SaveChangesAsync(ct);
+
+                logger.LogWarning(
+                    "[ExecuteNextStep] Step {Order} failed — routing to on_failure_step {Failure} for request {Ref}",
+                    currentStepDef.StepOrder, failureStep.StepOrder, request.ReferenceNumber);
+
+                if (failureStep.IsAutomated)
+                    return await Handle(new ExecuteNextStepCommand(request.Id), ct);
+
+                return new ExecuteNextStepResponse(false, request.CurrentStep, request.Status.ToString(),
+                    Message: $"Step failed — routed to recovery step {failureStep.StepOrder}.");
+            }
+
+            request.MarkActionRequired();
             await requestRepo.SaveChangesAsync(ct);
             return new ExecuteNextStepResponse(false, request.CurrentStep, request.Status.ToString(),
                 Message: $"Step failed: {result.ErrorMessage}");

@@ -7,6 +7,19 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Step-engine failure routing (T-SRV-4)**: `ExecuteNextStepHandler` now honors a step's
+  `on_failure_step` — a failing step with a failure route jumps there (re-executing if that step is
+  automated) instead of dead-ending; a failing step with no route sets the request to
+  `ActionRequired` (new `ServiceRequestEntity.MarkActionRequired`). Unhandled step types now fail
+  **loudly** — the step is marked `Failed` and the request `ActionRequired` — instead of silently
+  falling through to the Notification handler and auto-completing work that never ran. Step
+  executions are now created by a single mechanism: `SubmitServiceRequest` no longer pre-creates a
+  Running row for every step (which made "the active step" ambiguous), and `ExecuteNextStep` creates
+  exactly one execution per step as it runs, looked up by `(request, step order)`.
+
+  3 new tests (unhandled-type → ActionRequired, failure routing, failure-without-route). Full suite:
+  `dotnet build` clean, `dotnet test` 203/203 passing.
+
 - **Service-request submission gates + lifecycle integrity (T-SRV-3)**: `SubmitServiceRequestHandler`
   now enforces `RequiredLoa` (from the token's `loa` claim via a new `ClaimsPrincipal.GetLoa()`
   helper — never a caller-supplied value) and mandatory-document presence (via a new cross-module
