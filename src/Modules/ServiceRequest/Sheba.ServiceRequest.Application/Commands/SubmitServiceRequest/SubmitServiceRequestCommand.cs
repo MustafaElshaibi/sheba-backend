@@ -6,6 +6,7 @@ public sealed record SubmitServiceRequestCommand(
     Guid ServiceId,
     Guid CitizenId,
     string FormDataJson,
+    int CitizenLoa,
     string Priority = "NORMAL"
 ) : IRequest<SubmitServiceRequestResponse>;
 

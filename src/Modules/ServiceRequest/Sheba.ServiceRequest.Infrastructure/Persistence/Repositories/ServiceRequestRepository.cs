@@ -37,6 +37,15 @@ public sealed class ServiceRequestRepository(ServiceRequestDbContext db) : IServ
     public async Task AddAsync(ServiceRequestEntity request, CancellationToken ct = default)
         => await db.ServiceRequests.AddAsync(request, ct);
 
+    public async Task<List<ServiceRequestEntity>> GetOverdueAwaitingMinistryRequestsAsync(
+        DateTime asOf, CancellationToken ct = default)
+    {
+        return await db.ServiceRequests
+            .Where(r => r.Status == RequestLifecycleStatus.AwaitingMinistry
+                     && r.DueDate != null && r.DueDate < asOf)
+            .ToListAsync(ct);
+    }
+
     public async Task<RequestStepExecution?> GetStepExecutionByIdAsync(Guid id, CancellationToken ct = default)
         => await db.StepExecutions.FirstOrDefaultAsync(e => e.Id == id, ct);
 

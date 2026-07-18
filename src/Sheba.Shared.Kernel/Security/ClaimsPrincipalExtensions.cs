@@ -40,4 +40,12 @@ public static class ClaimsPrincipalExtensions
     /// </summary>
     public static Guid? GetMinistryId(this ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirst("ministry_id")?.Value, out var id) ? id : null;
+
+    /// <summary>
+    /// The citizen's Level of Assurance (BR-LOA-1/3) from the token's "loa" claim, set at login
+    /// (OidcEndpoints) and preserved across refresh. Defaults to 1 (LoA1: password + OTP) when the
+    /// claim is absent or unparsable — never silently grants a higher LoA than the token proves.
+    /// </summary>
+    public static int GetLoa(this ClaimsPrincipal user) =>
+        int.TryParse(user.FindFirst("loa")?.Value, out var loa) ? loa : 1;
 }

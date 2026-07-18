@@ -62,20 +62,38 @@ public sealed class ServiceRequestEntity : BaseEntity
     public void RaiseStepCompleted(Guid stepExecutionId, int stepOrder, string stepType)
         => RaiseDomainEvent(new WorkflowStepCompletedEvent(Id, stepExecutionId, stepOrder, stepType));
 
+    private static readonly HashSet<RequestLifecycleStatus> TerminalStatuses =
+    [
+        RequestLifecycleStatus.Completed,
+        RequestLifecycleStatus.Rejected,
+        RequestLifecycleStatus.Cancelled,
+        RequestLifecycleStatus.Expired
+    ];
+
+    /// <summary>T-SRV-3: no transition is legal out of a terminal status — a completed, rejected,
+    /// cancelled, or expired request is immutable (BR-SR-7).</summary>
+    private void EnsureNotTerminal(string action)
+    {
+        if (TerminalStatuses.Contains(Status))
+            throw new DomainException($"Cannot {action} a request in terminal status {Status}.");
+    }
+
     public void AdvanceToStep(int stepOrder, RequestLifecycleStatus newStatus)
     {
+        EnsureNotTerminal("advance");
         CurrentStep = stepOrder;
         Status = newStatus;
         Touch();
     }
 
-    public void MarkPaymentPending() { Status = RequestLifecycleStatus.PaymentPending; Touch(); }
-    public void MarkProcessing() { Status = RequestLifecycleStatus.Processing; Touch(); }
-    public void MarkAwaitingMinistry() { Status = RequestLifecycleStatus.AwaitingMinistry; Touch(); }
-    public void MarkUnderReview() { Status = RequestLifecycleStatus.UnderReview; Touch(); }
+    public void MarkPaymentPending() { EnsureNotTerminal("move to payment-pending"); Status = RequestLifecycleStatus.PaymentPending; Touch(); }
+    public void MarkProcessing() { EnsureNotTerminal("move to processing"); Status = RequestLifecycleStatus.Processing; Touch(); }
+    public void MarkAwaitingMinistry() { EnsureNotTerminal("move to awaiting-ministry"); Status = RequestLifecycleStatus.AwaitingMinistry; Touch(); }
+    public void MarkUnderReview() { EnsureNotTerminal("move to under-review"); Status = RequestLifecycleStatus.UnderReview; Touch(); }
 
     public void Complete()
     {
+        EnsureNotTerminal("complete");
         Status = RequestLifecycleStatus.Completed;
         CompletedAt = DateTime.UtcNow;
         Touch();
@@ -86,6 +104,7 @@ public sealed class ServiceRequestEntity : BaseEntity
 
     public void Reject(string reason)
     {
+        EnsureNotTerminal("reject");
         Status = RequestLifecycleStatus.Rejected;
         RejectionReason = reason;
         CompletedAt = DateTime.UtcNow;
@@ -94,9 +113,21 @@ public sealed class ServiceRequestEntity : BaseEntity
 
     public void Cancel()
     {
-        if (Status is RequestLifecycleStatus.Completed or RequestLifecycleStatus.Rejected)
-            throw new DomainException("Cannot cancel a completed or rejected request.");
+        EnsureNotTerminal("cancel");
         Status = RequestLifecycleStatus.Cancelled;
+        CompletedAt = DateTime.UtcNow;
+        Touch();
+    }
+
+    /// <summary>SLA sweep (BR-SR-6, T-SRV-3): an abandoned AwaitingMinistry request past its
+    /// due date is expired. Only legal from AwaitingMinistry — the sweep job itself enforces that,
+    /// this is the aggregate-level backstop.</summary>
+    public void Expire()
+    {
+        if (Status != RequestLifecycleStatus.AwaitingMinistry)
+            throw new DomainException($"Cannot expire a request in status {Status}. Only AwaitingMinistry requests are expired by the SLA sweep.");
+
+        Status = RequestLifecycleStatus.Expired;
         CompletedAt = DateTime.UtcNow;
         Touch();
     }

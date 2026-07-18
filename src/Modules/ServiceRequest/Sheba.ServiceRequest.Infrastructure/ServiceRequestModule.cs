@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sheba.Shared.Kernel.Security;
+using Sheba.ServiceRequest.Application.Commands.CancelServiceRequest;
 using Sheba.ServiceRequest.Application.Commands.CreateServiceCategory;
 using Sheba.ServiceRequest.Application.Commands.CreateServiceDefinition;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
@@ -150,10 +151,10 @@ public static class ServiceRequestModule
         requests.MapPost("/", async (
             SubmitServiceRequestBody body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            // CitizenId comes from the token — the body used to carry it directly, which let any
-            // authenticated citizen submit a request in someone else's name.
+            // CitizenId and LoA both come from the token — never trust a caller-supplied LoA for
+            // the submission gate (T-SRV-3), same reasoning as CitizenId above.
             var command = new SubmitServiceRequestCommand(
-                body.ServiceId, user.RequireSubjectId(), body.FormDataJson, body.Priority);
+                body.ServiceId, user.RequireSubjectId(), body.FormDataJson, user.GetLoa(), body.Priority);
             var result = await mediator.Send(command, ct);
             // Auto-execute the first workflow step
             await mediator.Send(new ExecuteNextStepCommand(result.RequestId), ct);
@@ -183,6 +184,16 @@ public static class ServiceRequestModule
         .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
         .WithName("GetRequestById")
         .WithSummary("Get full request detail with step executions (own requests only, unless admin).");
+
+        requests.MapPost("/{id:guid}/cancel", async (
+            Guid id, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new CancelServiceRequestCommand(id, user.RequireSubjectId()), ct);
+            return Results.Ok(result);
+        })
+        .RequireAuthorization("CitizenOnly")
+        .WithName("CancelServiceRequest")
+        .WithSummary("Cancel your own request (only before completion/rejection, BR-SR-7).");
 
         requests.MapPost("/{id:guid}/execute-next", async (
             Guid id, IMediator mediator, CancellationToken ct) =>

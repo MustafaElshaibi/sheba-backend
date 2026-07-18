@@ -20,6 +20,9 @@ public interface IServiceRequestRepository
         DateTime? fromDate = null, DateTime? toDate = null, CancellationToken ct = default);
     Task AddAsync(ServiceRequestEntity request, CancellationToken ct = default);
 
+    /// <summary>AwaitingMinistry requests past their DueDate (BR-SR-6 SLA sweep, T-SRV-3).</summary>
+    Task<List<ServiceRequestEntity>> GetOverdueAwaitingMinistryRequestsAsync(DateTime asOf, CancellationToken ct = default);
+
     // Step executions
     Task<RequestStepExecution?> GetStepExecutionByIdAsync(Guid id, CancellationToken ct = default);
     Task<RequestStepExecution?> GetActiveStepForRequestAsync(Guid requestId, CancellationToken ct = default);

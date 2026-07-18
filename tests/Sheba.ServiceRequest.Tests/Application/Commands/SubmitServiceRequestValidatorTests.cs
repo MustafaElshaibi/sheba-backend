@@ -41,7 +41,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_FormDataSatisfiesSchema_Passes()
     {
         WithSchema(Schema);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"fullName":"Ali Mohammed","age":30}""");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"fullName":"Ali Mohammed","age":30}""", 1);
 
         var result = await _sut.ValidateAsync(command);
 
@@ -52,7 +52,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_MissingRequiredField_FailsWithFormDataFieldKey()
     {
         WithSchema(Schema);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"age":30}""");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"age":30}""", 1);
 
         var result = await _sut.ValidateAsync(command);
 
@@ -64,7 +64,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_WrongFieldType_FailsWithPerFieldKey()
     {
         WithSchema(Schema);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"fullName":"Ali","age":"not-a-number"}""");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"fullName":"Ali","age":"not-a-number"}""", 1);
 
         var result = await _sut.ValidateAsync(command);
 
@@ -76,7 +76,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_MalformedJson_FailsWithFormDataKey()
     {
         WithSchema(Schema);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, "{not valid json");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, "{not valid json", 1);
 
         var result = await _sut.ValidateAsync(command);
 
@@ -89,7 +89,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_ServiceHasNoFormSchema_PassesThrough()
     {
         WithSchema(null);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"anything":"goes"}""");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, """{"anything":"goes"}""", 1);
 
         var result = await _sut.ValidateAsync(command);
 
@@ -100,7 +100,7 @@ public sealed class SubmitServiceRequestValidatorTests
     public async Task Validate_EmptyFormDataJson_FailsNotEmptyRule()
     {
         WithSchema(Schema);
-        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, "");
+        var command = new SubmitServiceRequestCommand(_serviceId, _citizenId, "", 1);
 
         var result = await _sut.ValidateAsync(command);
 

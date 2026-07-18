@@ -3,12 +3,20 @@ using Microsoft.Extensions.Logging;
 using Sheba.ServiceRequest.Domain.Entities;
 using Sheba.ServiceRequest.Domain.Interfaces;
 using Sheba.Shared.Kernel.Exceptions;
+using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest;
 
+/// <summary>
+/// BR-SR-2 submission gates (T-SRV-3): LoA ≥ required_loa and every mandatory document type
+/// present, both enforced here as 422s before a request is ever created. The account-Approved
+/// check is implicit — only an Approved citizen can hold a bearer token with a "loa" claim at all
+/// (BR-ON-10), so reaching this handler already proves it.
+/// </summary>
 public sealed class SubmitServiceRequestHandler(
     IServiceDefinitionRepository definitionRepo,
     IServiceRequestRepository requestRepo,
+    IDocumentPort documentPort,
     ILogger<SubmitServiceRequestHandler> logger
 ) : IRequestHandler<SubmitServiceRequestCommand, SubmitServiceRequestResponse>
 {
@@ -21,6 +29,27 @@ public sealed class SubmitServiceRequestHandler(
 
         if (!service.IsActive)
             throw new DomainException("This service is currently unavailable.");
+
+        if (command.CitizenLoa < service.RequiredLoa)
+        {
+            throw new DomainException(
+                $"This service requires identity level {service.RequiredLoa}; your account is at level {command.CitizenLoa}.");
+        }
+
+        var mandatoryTypes = service.RequiredDocuments
+            .Where(d => d.IsMandatory)
+            .Select(d => d.DocumentType)
+            .ToList();
+        if (mandatoryTypes.Count > 0)
+        {
+            var ownedTypes = await documentPort.GetOwnerDocumentTypesAsync(command.CitizenId, ct);
+            var missing = mandatoryTypes.Where(t => !ownedTypes.Contains(t)).ToList();
+            if (missing.Count > 0)
+            {
+                throw new DomainException(
+                    $"Missing required document(s): {string.Join(", ", missing)}.");
+            }
+        }
 
         // 2. Create the service request
         var request = ServiceRequestEntity.Create(

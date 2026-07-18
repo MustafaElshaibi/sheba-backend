@@ -38,6 +38,7 @@ public static class DocumentModule
 
         services.AddScoped<DbContext>(sp => sp.GetRequiredService<DocumentDbContext>());
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<Sheba.Shared.Kernel.Interfaces.IDocumentPort, Adapters.DocumentPortAdapter>();
         services.AddSingleton<IFileStorage, MinioFileStorage>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork<DocumentDbContext>>();
         services.AddScoped<IInboxGuard, EfInboxGuard<DocumentDbContext>>();

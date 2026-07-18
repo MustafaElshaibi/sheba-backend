@@ -7,6 +7,25 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Service-request submission gates + lifecycle integrity (T-SRV-3)**: `SubmitServiceRequestHandler`
+  now enforces `RequiredLoa` (from the token's `loa` claim via a new `ClaimsPrincipal.GetLoa()`
+  helper — never a caller-supplied value) and mandatory-document presence (via a new cross-module
+  `IDocumentPort`/`DocumentPortAdapter`) before a request is created; both fail as 422
+  `DomainException`s. `ServiceRequestEntity` gained transition guards — every `Mark*`/`Advance`/
+  `Complete`/`Reject`/`Cancel` now throws from a terminal status (`Completed`/`Rejected`/
+  `Cancelled`/`Expired`), so a decided request is immutable (BR-SR-7). New citizen cancel endpoint
+  `POST /api/requests/{id}/cancel` (`CitizenOnly`, 404-not-403 on cross-owner attempt). New hourly
+  `SlaSweepJob` expires overdue `AwaitingMinistry` requests past their `DueDate` (BR-SR-6) via a new
+  `Account`-less `Expire()` transition (legal only from `AwaitingMinistry`).
+
+  Not included (carved out as a Low residual in known-issues.md): JSON-Logic **eligibility-rules**
+  evaluation — `EligibilityRulesJson` is stored but not yet evaluated at submit; needs a JSON-Logic
+  evaluator dependency, deferred rather than pulled in under this task. LoA and required-documents
+  gating are fully in place.
+
+  8 new tests (transition guards + LoA gate). Full suite: `dotnet build` clean, `dotnet test`
+  200/200 passing.
+
 - **Ministry seed + per-endpoint outbound rate limit (T-MIN-1)**: `MinistryModule.SeedMinistriesAsync`
   seeds the five demo ministries at the same fixed GUIDs `ServiceRequestModule.SeedServiceCatalogAsync`
   already hardcoded (previously referencing ministry ids that existed in no table); runs before the

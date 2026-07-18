@@ -19,6 +19,7 @@ using Sheba.Ministry.Infrastructure;
 using Sheba.Notification.Infrastructure;
 using Sheba.Payment.Infrastructure;
 using Sheba.ServiceRequest.Infrastructure;
+using Sheba.ServiceRequest.Infrastructure.Jobs;
 using Sheba.Wallet.Infrastructure;
 using StackExchange.Redis;
 
@@ -215,6 +216,7 @@ try
     // ── Outbox dispatcher (T-EVT-1) — Hangfire is registered by AddAdminModule above ──────────
     builder.Services.AddScoped<OutboxDispatcherJob>();
     builder.Services.AddScoped<AccountPurgeJob>();
+    builder.Services.AddScoped<SlaSweepJob>();
 
     // ── Build ─────────────────────────────────────────────────────────────────────────────────
     var app = builder.Build();
@@ -274,6 +276,12 @@ try
     RecurringJob.AddOrUpdate<AccountPurgeJob>(
         "account-purge",
         job => job.PurgeAsync(CancellationToken.None),
+        Cron.Hourly());
+
+    // SLA sweep (T-SRV-3): expire overdue AwaitingMinistry requests.
+    RecurringJob.AddOrUpdate<SlaSweepJob>(
+        "sla-sweep",
+        job => job.SweepAsync(CancellationToken.None),
         Cron.Hourly());
 
     // ── Run all module EF Core migrations + seed data on startup ────────────────────────────────

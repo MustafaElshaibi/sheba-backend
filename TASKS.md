@@ -141,7 +141,7 @@ row in known-issues §1 by the same ID.
 - [ ] **T-INT-1** OpenCRVS `INationalIdProvider` adapter (GraphQL/REST) + contract tests.
 - [ ] **T-INT-2** OTP provider failover ordering + spend alarm hooks.
 - [ ] Ministry health dashboard: scheduled `TestConnectionAsync` sweep → Admin KPIs.
-- [ ] **T-SRV-3** Submission gates + lifecycle integrity *(High · M · deps: T-AUTH-2 (loa claim) ·
+- [x] **T-SRV-3** Submission gates + lifecycle integrity *(High · M · deps: T-AUTH-2 (loa claim) ·
       issue: T-SRV-3)*: enforce `RequiredLoa` (from the token's `loa` claim), eligibility, and
       required documents at submit (§5.4.1); transition guards on `ServiceRequestEntity`
       (invalid transitions throw `DomainException`); citizen cancel endpoint; scheduled SLA sweep
