@@ -7,6 +7,36 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Account lifecycle completion (T-ID-1)**: `Account.Suspend`/`Reinstate`/`Deactivate` (§6.2:
+  `Approved ⇄ Suspended`, `Approved → Deactivated` terminal) behind new admin endpoints
+  `POST /api/admin/accounts/{id}/{suspend,reinstate,deactivate}` (`IdentityReviewer` policy).
+  Suspending or deactivating raises a new Shared.Kernel event consumed by two independent
+  handlers: Identity emails the citizen, and Wallet revokes all of the account's Verifiable
+  Credentials (BR-WA-1, previously undone — VCs stayed valid through a suspension). Fixed a
+  real bug in the same area: `Account.Reject(reason)` accepted a rejection reason but silently
+  discarded it — there was no `RejectionReason` field on `Account` at all (the `IdentityRequest`
+  side already stored it correctly). A `Rejected` account can now re-apply by registering again
+  with the same NID: `RegisterCitizenHandler` reuses the existing row instead of hitting the
+  already-registered guard, resets it to `PendingVerification`, and returns a response
+  indistinguishable from a brand-new registration (BR-ON-3). New hourly Hangfire job
+  (`AccountPurgeJob`) hard-deletes abandoned `PendingVerification` accounts (default 24h,
+  `Identity:PendingVerificationPurgeHours`) — freeing their NID — plus spent/expired OTP records
+  everywhere, closing the gap OtpRecord's doc comment always described but nothing implemented.
+
+  Found and fixed a subtler bug while building the purge cutoff: filtering on `CreatedAt` would
+  make a `Rejected` account that just re-applied (which reuses its original row and `CreatedAt`)
+  immediately eligible for purge if the original registration was old. Filtered on `UpdatedAt`
+  instead, which `Touch()` bumps on every transition including `ReApply`.
+
+  21 new tests (`Account` lifecycle transitions + domain events, three lifecycle handlers,
+  re-application). **Verified live**: suspend → login blocked → reinstate → login restored →
+  deactivate → login blocked → reinstate-attempt correctly rejected (terminal); suspend/
+  reinstate/deactivate emails all arrived in MailHog; `wallet.verifiable_credentials.is_revoked`
+  flips to `true` on deactivation; reject → `accounts.rejection_reason` persists → re-register
+  with the same NID reuses the account row, resets to `PendingVerification`, clears the reason,
+  and opens a fresh `IdentityRequest` alongside the old rejected one. Full suite: `dotnet build`
+  clean, `dotnet test` 192/192 passing.
+
 - **Password reset flow (BR-LG-7)**: `POST /api/identity/password-reset/request` +
   `POST /api/identity/password-reset/confirm`, gated on an OTP sent to the account's
   **registry-registered** phone (never citizen-supplied, mirroring BR-ON-5) and only available to

@@ -101,6 +101,43 @@ public sealed class IdentityRepository(IdentityDbContext db) : IIdentityReposito
             otp.Expire();   // sets ExpiresAt = DateTime.UtcNow - 1s via domain method
     }
 
+    // ── Purge (T-ID-1) ───────────────────────────────────────────────────────
+
+    public async Task<List<Account>> GetExpiredPendingVerificationAccountsAsync(
+        DateTime olderThan, CancellationToken ct = default)
+    {
+        // UpdatedAt, not CreatedAt: a Rejected account that just re-applied (Account.ReApply)
+        // reuses its original row and keeps its original CreatedAt, but Touch() bumps UpdatedAt —
+        // filtering on CreatedAt would make a re-application eligible for immediate purge.
+        return await db.Accounts
+                       .Where(a => a.Status == AccountStatus.PendingVerification && a.UpdatedAt < olderThan)
+                       .ToListAsync(ct);
+    }
+
+    public async Task PurgeAccountAsync(Guid accountId, CancellationToken ct = default)
+    {
+        // No DB-level FK (logical UUID references only, per architecture rules) — clean up the
+        // dependent rows explicitly so an abandoned registration doesn't leave orphans behind.
+        var otps = await db.OtpRecords.Where(o => o.AccountId == accountId).ToListAsync(ct);
+        db.OtpRecords.RemoveRange(otps);
+
+        var requests = await db.IdentityRequests.Where(r => r.AccountId == accountId).ToListAsync(ct);
+        db.IdentityRequests.RemoveRange(requests);
+
+        var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, ct);
+        if (account is not null)
+            db.Accounts.Remove(account);
+    }
+
+    public async Task<int> PurgeSpentOtpRecordsAsync(DateTime expiredBefore, CancellationToken ct = default)
+    {
+        var spent = await db.OtpRecords
+                            .Where(o => o.UsedAt != null || o.ExpiresAt < expiredBefore)
+                            .ToListAsync(ct);
+        db.OtpRecords.RemoveRange(spent);
+        return spent.Count;
+    }
+
     // ── Unit of Work ─────────────────────────────────────────────────────────
 
     // ── AdminUser ────────────────────────────────────────────────────────────

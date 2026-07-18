@@ -1,6 +1,7 @@
 using Sheba.Identity.Domain.DomainEvents;
 using Sheba.Identity.Domain.Enums;
 using Sheba.Shared.Kernel.Entities;
+using Sheba.Shared.Kernel.Events.IntegrationEvents;
 using Sheba.Shared.Kernel.Exceptions;
 
 namespace Sheba.Identity.Domain.Entities;
@@ -32,6 +33,11 @@ public sealed class Account : BaseEntity
     public int FailedLoginCount { get; private set; }
     public DateTime? LockedUntil { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
+
+    // ── Lifecycle reasons ──────────────────────────────────────────────────────
+    public string? RejectionReason { get; private set; }
+    public string? SuspensionReason { get; private set; }
+    public string? DeactivationReason { get; private set; }
 
     // EF Core requires a parameterless constructor
     private Account() { }
@@ -110,7 +116,64 @@ public sealed class Account : BaseEntity
             throw new DomainException($"Cannot reject account in status {Status}.");
 
         Status = AccountStatus.Rejected;
+        RejectionReason = rejectionReason;
         Touch();
+    }
+
+    /// <summary>
+    /// A Rejected citizen re-applies: restarts onboarding from PendingVerification so a fresh
+    /// IdentityRequest can be submitted (sheba.md §6.2). Only Rejected accounts may re-apply —
+    /// every other status either already has an open request or is already active.
+    /// </summary>
+    public void ReApply()
+    {
+        if (Status != AccountStatus.Rejected)
+            throw new DomainException($"Only a Rejected account can re-apply, not {Status}.");
+
+        Status = AccountStatus.PendingVerification;
+        RejectionReason = null;
+        Touch();
+    }
+
+    /// <summary>Admin places a security hold on an active account (§6.2: Approved → Suspended).</summary>
+    public void Suspend(string? reason = null)
+    {
+        if (Status != AccountStatus.Approved)
+            throw new DomainException($"Cannot suspend account in status {Status}. Only an Approved account can be suspended.");
+
+        Status = AccountStatus.Suspended;
+        SuspensionReason = reason;
+        Touch();
+
+        RaiseDomainEvent(new AccountSuspendedEvent(Id, reason));
+    }
+
+    /// <summary>Admin lifts a security hold (§6.2: Suspended → Approved).</summary>
+    public void Reinstate()
+    {
+        if (Status != AccountStatus.Suspended)
+            throw new DomainException($"Cannot reinstate account in status {Status}. Only a Suspended account can be reinstated.");
+
+        Status = AccountStatus.Approved;
+        SuspensionReason = null;
+        Touch();
+
+        RaiseDomainEvent(new AccountReinstatedEvent(Id));
+    }
+
+    /// <summary>
+    /// Admin or citizen-requested closure. Terminal — §6.2 has no transition out of Deactivated.
+    /// </summary>
+    public void Deactivate(string? reason = null)
+    {
+        if (Status != AccountStatus.Approved)
+            throw new DomainException($"Cannot deactivate account in status {Status}. Only an Approved account can be deactivated.");
+
+        Status = AccountStatus.Deactivated;
+        DeactivationReason = reason;
+        Touch();
+
+        RaiseDomainEvent(new AccountDeactivatedEvent(Id, reason));
     }
 
     /// <summary>Records a failed login attempt; locks after 5 failures.</summary>

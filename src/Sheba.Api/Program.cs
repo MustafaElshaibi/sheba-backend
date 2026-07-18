@@ -13,6 +13,7 @@ using Sheba.Audit.Infrastructure.Behaviors;
 using Sheba.Citizen.Infrastructure;
 using Sheba.Document.Infrastructure;
 using Sheba.Identity.Infrastructure;
+using Sheba.Identity.Infrastructure.Jobs;
 using Sheba.Identity.Infrastructure.Oidc;
 using Sheba.Ministry.Infrastructure;
 using Sheba.Notification.Infrastructure;
@@ -211,6 +212,7 @@ try
 
     // ── Outbox dispatcher (T-EVT-1) — Hangfire is registered by AddAdminModule above ──────────
     builder.Services.AddScoped<OutboxDispatcherJob>();
+    builder.Services.AddScoped<AccountPurgeJob>();
 
     // ── Build ─────────────────────────────────────────────────────────────────────────────────
     var app = builder.Build();
@@ -265,6 +267,12 @@ try
         "outbox-dispatcher",
         job => job.DispatchAsync(CancellationToken.None),
         Cron.Minutely());
+
+    // Account purge (T-ID-1): abandoned PendingVerification registrations + spent OTP records.
+    RecurringJob.AddOrUpdate<AccountPurgeJob>(
+        "account-purge",
+        job => job.PurgeAsync(CancellationToken.None),
+        Cron.Hourly());
 
     // ── Run all module EF Core migrations + seed data on startup ────────────────────────────────
     // Wrapped so a transient DB outage does not prevent the API from serving Swagger/endpoints.

@@ -87,6 +87,18 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.LastLoginAt)
             .HasColumnName("last_login_at");
 
+        builder.Property(a => a.RejectionReason)
+            .HasColumnName("rejection_reason")
+            .HasMaxLength(1000);
+
+        builder.Property(a => a.SuspensionReason)
+            .HasColumnName("suspension_reason")
+            .HasMaxLength(1000);
+
+        builder.Property(a => a.DeactivationReason)
+            .HasColumnName("deactivation_reason")
+            .HasMaxLength(1000);
+
         builder.Property(a => a.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

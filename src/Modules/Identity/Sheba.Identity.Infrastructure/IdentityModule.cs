@@ -17,12 +17,15 @@ using Sheba.Identity.Application.Commands.CompleteRegistration;
 using Sheba.Identity.Application.Commands.ConfirmAdminMfa;
 using Sheba.Identity.Application.Commands.ConfirmPasswordReset;
 using Sheba.Identity.Application.Commands.CreateAdminUser;
+using Sheba.Identity.Application.Commands.DeactivateAccount;
 using Sheba.Identity.Application.Commands.EnrollAdminMfa;
 using Sheba.Identity.Application.Commands.LoginCitizen;
 using Sheba.Identity.Application.Commands.RegisterCitizen;
+using Sheba.Identity.Application.Commands.ReinstateAccount;
 using Sheba.Identity.Application.Commands.RejectIdentityRequest;
 using Sheba.Identity.Application.Commands.RequestLoaUpgrade;
 using Sheba.Identity.Application.Commands.RequestPasswordReset;
+using Sheba.Identity.Application.Commands.SuspendAccount;
 using Sheba.Identity.Application.Commands.VerifyEmail;
 using Sheba.Identity.Application.Commands.VerifyLoginOtp;
 using Sheba.Identity.Application.Commands.VerifyOtp;
@@ -519,18 +522,47 @@ public static class IdentityModule
         .WithName("RejectIdentityRequest")
         .WithSummary("Reject an identity request with a reason.");
 
-        // ── Admin account lookup ──────────────────────────────────────────────
-        app.MapGet("/api/admin/accounts/{id:guid}", async (
+        // ── Admin account lookup + lifecycle ──────────────────────────────────
+        var accounts = app.MapGroup("/api/admin/accounts")
+            .WithTags("Admin — Accounts")
+            .RequireAuthorization("IdentityReviewer")
+            .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>(); // JSend envelopes (T-API-1)
+
+        accounts.MapGet("/{id:guid}", async (
             Guid id, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetAccountByIdQuery(id), ct);
             return result.ToHttpResult();
         })
-        .WithTags("Admin — Accounts")
-        .RequireAuthorization("IdentityReviewer")
-        .AddEndpointFilter<Sheba.Shared.Kernel.Responses.JSendWrappingFilter>() // JSend envelopes (T-API-1)
         .WithName("GetAccountById")
         .WithSummary("Get a citizen account by ID.");
+
+        accounts.MapPost("/{id:guid}/suspend", async (
+            Guid id, AccountLifecycleBody body, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new SuspendAccountCommand(id, body.Reason), ct);
+            return result.ToHttpResult();
+        })
+        .WithName("SuspendAccount")
+        .WithSummary("Place a security hold on an Approved account (sheba.md §6.2).");
+
+        accounts.MapPost("/{id:guid}/reinstate", async (
+            Guid id, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new ReinstateAccountCommand(id), ct);
+            return result.ToHttpResult();
+        })
+        .WithName("ReinstateAccount")
+        .WithSummary("Lift a security hold on a Suspended account.");
+
+        accounts.MapPost("/{id:guid}/deactivate", async (
+            Guid id, AccountLifecycleBody body, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new DeactivateAccountCommand(id, body.Reason), ct);
+            return result.ToHttpResult();
+        })
+        .WithName("DeactivateAccount")
+        .WithSummary("Close an Approved account (terminal — no reactivation).");
 
         return app;
     }
@@ -546,6 +578,9 @@ public static class IdentityModule
 
     /// <summary>Request body for the reject endpoint — the reviewer id comes from the token.</summary>
     public sealed record RejectIdentityRequestBody(string RejectionReason, string? Notes = null);
+
+    /// <summary>Request body for the suspend/deactivate endpoints — reason is optional.</summary>
+    public sealed record AccountLifecycleBody(string? Reason = null);
 
     /// <summary>
     /// Seeds OpenIddict applications and the mock citizen registry.

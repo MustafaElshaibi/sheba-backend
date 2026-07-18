@@ -21,6 +21,16 @@ public interface IIdentityRepository
     Task<OtpRecord?> FindActiveOtpAsync(Guid accountId, Domain.Enums.OtpPurpose purpose, CancellationToken ct = default);
     Task InvalidatePreviousOtpsAsync(Guid accountId, Domain.Enums.OtpPurpose purpose, CancellationToken ct = default);
 
+    // ── Purge (T-ID-1) ───────────────────────────────────────────────────────
+    /// <summary>Abandoned registrations: still PendingVerification past the given cutoff.</summary>
+    Task<List<Account>> GetExpiredPendingVerificationAccountsAsync(DateTime olderThan, CancellationToken ct = default);
+
+    /// <summary>Hard-deletes an account and its OtpRecord/IdentityRequest rows (frees the NID).</summary>
+    Task PurgeAccountAsync(Guid accountId, CancellationToken ct = default);
+
+    /// <summary>Hard-deletes used-up or long-expired OTP records across all accounts. Returns the count removed.</summary>
+    Task<int> PurgeSpentOtpRecordsAsync(DateTime expiredBefore, CancellationToken ct = default);
+
     // ── AdminUser ──────────────────────────────────────────────────────────────
     Task AddAdminUserAsync(AdminUser admin, CancellationToken ct = default);
     Task<AdminUser?> FindAdminByEmployeeIdAsync(string employeeId, CancellationToken ct = default);

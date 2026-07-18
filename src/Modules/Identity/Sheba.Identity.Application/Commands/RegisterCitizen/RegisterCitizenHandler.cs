@@ -64,27 +64,42 @@ public sealed class RegisterCitizenHandler(
             return Result.Failure<RegisterCitizenResponse>(Error.Conflict("domain", GenericVerificationError));
         }
 
-        // ── Step 2: Guard — already registered ─────────────────────────────────
+        // ── Step 2: Guard — already registered, unless this is a Rejected re-application ────────
         var existing = await repository.FindAccountByNidAsync(request.NationalId, cancellationToken);
+        Account account;
         if (existing is not null)
         {
-            logger.LogWarning(
-                "[RegisterCitizen] NID {Nid} is already registered (AccountId={AccountId})",
+            if (existing.Status != Domain.Enums.AccountStatus.Rejected)
+            {
+                logger.LogWarning(
+                    "[RegisterCitizen] NID {Nid} is already registered (AccountId={AccountId})",
+                    MaskNid(request.NationalId), existing.Id);
+
+                // Same generic error as the NID-check failure above — see GenericVerificationError.
+                // "Already registered" must not be distinguishable from "not in registry", or an
+                // attacker learns which NIDs already hold Sheba accounts. Account recovery is a
+                // separate, deliberately-initiated flow, not something we hint at here.
+                return Result.Failure<RegisterCitizenResponse>(Error.Conflict("domain", GenericVerificationError));
+            }
+
+            // Re-application (sheba.md §6.2: Rejected → PendingVerification, new IdentityRequest).
+            // Response shape is identical to a brand-new registration — nothing here should let a
+            // caller distinguish "new NID" from "previously-rejected NID re-applying" (BR-ON-3).
+            logger.LogInformation(
+                "[RegisterCitizen] NID {Nid} re-applying after prior rejection (AccountId={AccountId})",
                 MaskNid(request.NationalId), existing.Id);
-
-            // Same generic error as the NID-check failure above — see GenericVerificationError.
-            // "Already registered" must not be distinguishable from "not in registry", or an
-            // attacker learns which NIDs already hold Sheba accounts. Account recovery is a
-            // separate, deliberately-initiated flow, not something we hint at here.
-            return Result.Failure<RegisterCitizenResponse>(Error.Conflict("domain", GenericVerificationError));
+            existing.ReApply();
+            account = existing;
         }
-
-        // ── Step 3: Create Account entity ───────────────────────────────────────
-        var account = Account.CreateFromNidCheck(
-            nationalId:  request.NationalId,
-            phoneNumber: nidResult.PhoneNumber,
-            fullNameAr:  nidResult.FullNameAr,
-            fullNameEn:  nidResult.FullNameEn);
+        else
+        {
+            // ── Step 3: Create Account entity ───────────────────────────────────
+            account = Account.CreateFromNidCheck(
+                nationalId:  request.NationalId,
+                phoneNumber: nidResult.PhoneNumber,
+                fullNameAr:  nidResult.FullNameAr,
+                fullNameEn:  nidResult.FullNameEn);
+        }
 
         // ── Step 4: Create IdentityRequest ──────────────────────────────────────
         var citizenSnapshot = new
@@ -133,7 +148,10 @@ public sealed class RegisterCitizenHandler(
             ttlMinutes: 5);
 
         // ── Step 6: Persist in one atomic transaction ────────────────────────────
-        await repository.AddAccountAsync(account, cancellationToken);
+        // Re-application reuses the existing (already-tracked) Account row — only a brand-new
+        // registration needs an explicit Add.
+        if (existing is null)
+            await repository.AddAccountAsync(account, cancellationToken);
         await repository.AddIdentityRequestAsync(identityRequest, cancellationToken);
         await repository.AddOtpRecordAsync(otpRecord, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);

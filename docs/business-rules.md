@@ -47,6 +47,19 @@ of each new request.
 deactivated, rejected, and all pending states are refused with an appropriate (non-enumerating)
 message.
 
+**BR-ON-11** Account lifecycle transitions (System Admin / IdentityReviewer only, §10.2):
+`Approved → Suspended` (security hold, reason recorded), `Suspended → Approved` (reinstated),
+`Approved → Deactivated` (terminal — no transition out). Suspension/deactivation also revokes the
+account's Verifiable Credentials (BR-WA-1) and notifies the citizen by email.
+
+**BR-ON-12** A `Rejected` account may re-apply: `POST /api/identity/register` with the same
+national ID reuses the existing account row, resets it to `PendingVerification`, clears the prior
+`RejectionReason`, and submits a new `IdentityRequest` — the response is identical in shape to a
+brand-new registration (BR-ON-3: a caller cannot distinguish "new NID" from "previously-rejected
+NID re-applying"). A `PendingVerification` account that never completes OTP verification is
+hard-deleted by a background purge job (`Identity:PendingVerificationPurgeHours`, default 24h)
+along with its OTP and identity-request rows, freeing the national ID to register again.
+
 ## 2. Login & sessions
 
 Sequence: [sheba.md §6.3](sheba.md#63-login-flow-password--sms-otp)

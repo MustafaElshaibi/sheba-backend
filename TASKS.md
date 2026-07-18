@@ -105,7 +105,7 @@ row in known-issues §1 by the same ID.
       and bump the pin in `Directory.Packages.props`.
       AC: deleting a registered relying party returns 204 and the row is gone; full test suite
       still green after the version bump (shared package, broader regression risk than one route).
-- [ ] **T-ID-1** Account lifecycle completion *(High · M · deps: T-AUTH-2 · issue: T-ID-1)*:
+- [x] **T-ID-1** Account lifecycle completion *(High · M · deps: T-AUTH-2 · issue: T-ID-1)*:
       `Suspend`/`Reinstate`/`Deactivate` on the `Account` aggregate + admin endpoints (audited,
       citizen notified); persist the rejection reason; re-application path for Rejected accounts
       (new `IdentityRequest` per §6.2); Hangfire purge job for expired PendingVerification

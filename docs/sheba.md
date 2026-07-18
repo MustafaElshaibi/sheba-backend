@@ -1331,7 +1331,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R2 | Ten bounded contexts incl. Gateway | §3.3, §5 | All | Implemented (Gateway = middleware, §5.11) |
 | R3 | Migration path / extraction seams | §3.4, §11.4 | All | Designed |
 | R4 | DDD, CQRS, Mediator, Repo+UoW, Outbox, Strategy, ACL/Adapter, Result, Options | §15 | All | Implemented — `Result<T>` (T-STD-1) adopted in Identity; other modules still exception-based, convert one module per pass |
-| R5 | Onboarding: registry NID+phone match → credentials → admin queue → dual email notifications → activation gate | §6.2 | Identity, Notification | Implemented; rejection re-application + abandoned-registration purge missing (T-ID-1) |
+| R5 | Onboarding: registry NID+phone match → credentials → admin queue → dual email notifications → activation gate | §6.2 | Identity, Notification | Implemented — rejection re-application and the abandoned-registration purge job are done (T-ID-1) |
 | R6 | No login without active approved identity | §6.2 rule 6 | Identity | Implemented |
 | R7 | Login: NID/username + password, then phone OTP | §6.3 | Identity | Implemented (custom grant) |
 | R8 | Ministry/system auth: OIDC, OAuth2, API key, bearer, basic — per-integration selectable | §6.8 (inbound), §7.2 (outbound) | Identity, Ministry | Implemented |
