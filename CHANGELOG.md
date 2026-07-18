@@ -7,6 +7,20 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Ministry seed + per-endpoint outbound rate limit (T-MIN-1)**: `MinistryModule.SeedMinistriesAsync`
+  seeds the five demo ministries at the same fixed GUIDs `ServiceRequestModule.SeedServiceCatalogAsync`
+  already hardcoded (previously referencing ministry ids that existed in no table); runs before the
+  catalog seeder in `Program.cs`, idempotent. `Ministry.Create` gained an optional `id` parameter
+  for this (every other caller keeps the default fresh-`Guid` behavior). `MinistryCallPortAdapter`
+  now enforces `MinistryEndpoint.RateLimitPerMinute` via a Redis fixed-window counter
+  (`ministry:ratelimit:{endpointId}:{yyyyMMddHHmm}`) before sending the outbound call; a limited
+  call returns `MinistryCallResult.RateLimited = true` without ever hitting the network, and
+  `MinistryCallStepHandler` defers the workflow step (`AdvanceWorkflow = false`) instead of failing
+  the request outright for what's a transient throttle, not a real failure.
+
+  Full suite: `dotnet build` clean, `dotnet test` 192/192 passing (no behavior change to any
+  existing endpoint limit value — `RateLimitPerMinute` defaults to `null`/unlimited).
+
 - **Citizen module completion (T-CIT-1)**: `CreateCitizenProfileOnApprovalHandler` consumes
   `IdentityRequestDecidedEvent(approved)` (inbox-guarded, idempotent) to materialize the
   `CitizenProfile` row other modules read via `ICitizenAccountQueryService`. `/api/citizens/me`

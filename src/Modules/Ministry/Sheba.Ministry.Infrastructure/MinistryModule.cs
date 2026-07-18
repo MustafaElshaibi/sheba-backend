@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sheba.Ministry.Application.Commands.CreateMinistry;
 using Sheba.Ministry.Application.Commands.RegisterMinistryEndpoint;
 using Sheba.Ministry.Application.Commands.RegisterMinistryWebhook;

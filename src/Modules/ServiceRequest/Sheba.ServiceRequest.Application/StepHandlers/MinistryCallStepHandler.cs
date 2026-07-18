@@ -31,6 +31,18 @@ public sealed class MinistryCallStepHandler(
         var result = await ministryCall.InvokeAsync(
             stepDefinition.MinistryEndpointId.Value, request.CitizenId, request.FormDataJson, ct);
 
+        if (result.RateLimited)
+        {
+            logger.LogWarning(
+                "[MinistryCallStep] Endpoint {EndpointId} deferred (rate limited) for request {Ref}",
+                stepDefinition.MinistryEndpointId, request.ReferenceNumber);
+
+            // AdvanceWorkflow=false: the step stays put so a later retry (outbox/step-retry job)
+            // can pick it up once the endpoint's per-minute window resets, rather than failing the
+            // request outright for a transient outbound throttle.
+            return new StepExecutionResult(false, false, ErrorMessage: result.ErrorMessage);
+        }
+
         var body = result.ResponseBody ?? "";
         var bodyJson = body.StartsWith('{') || body.StartsWith('[') ? body : $"\"{body}\"";
         var resultJson =

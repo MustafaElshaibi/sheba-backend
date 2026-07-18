@@ -157,7 +157,7 @@ row in known-issues §1 by the same ID.
       AC: a failing step with `on_failure_step` routes there; an unknown step type marks the step
       `Failed` and the request `ActionRequired`; exactly one execution row exists per executed
       step.
-- [ ] **T-MIN-1** Ministry seed + per-endpoint outbound rate limit *(Low · S · deps: none ·
+- [x] **T-MIN-1** Ministry seed + per-endpoint outbound rate limit *(Low · S · deps: none ·
       issue: T-MIN-1)*: seed the five demo ministries referenced by the catalog's hardcoded
       GUIDs; enforce `MinistryEndpoint.RateLimitPerMinute` in `MinistryCallStepHandler`.
       AC: clean-volume `docker compose up` yields a resolvable ministry for every seeded service;

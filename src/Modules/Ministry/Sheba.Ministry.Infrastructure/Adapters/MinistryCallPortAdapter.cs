@@ -93,4 +93,20 @@ public sealed class MinistryCallPortAdapter(
             return new MinistryCallResult(false, null, sw.ElapsedMilliseconds, null, ex.Message);
         }
     }
+
+    /// <summary>
+    /// Fixed-window counter keyed per endpoint per calendar minute (UTC). Simpler than a sliding
+    /// window — acceptable here since RateLimitPerMinute is a soft outbound throttle to a
+    /// ministry's API, not a security control.
+    /// </summary>
+    private async Task<bool> IsRateLimitedAsync(Guid endpointId, int limitPerMinute)
+    {
+        var db = redis.GetDatabase();
+        var key = $"ministry:ratelimit:{endpointId}:{DateTime.UtcNow:yyyyMMddHHmm}";
+        var count = await db.StringIncrementAsync(key);
+        if (count == 1)
+            await db.KeyExpireAsync(key, TimeSpan.FromSeconds(65));
+
+        return count > limitPerMinute;
+    }
 }
