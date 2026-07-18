@@ -98,7 +98,7 @@ row in known-issues §1 by the same ID.
       a stolen refresh token from the browser PKCE flow also gets cascade-revoked on reuse.
       AC: a refresh token minted via `/connect/authorize` behaves identically to one from the
       custom grants under `RotateRefreshTokenFamilyHandler`.
-- [ ] **T-OIDC-3** Fix `DELETE /api/admin/relying-parties/{clientId}` 500 *(Medium · S · deps:
+- [x] **T-OIDC-3** Fix `DELETE /api/admin/relying-parties/{clientId}` 500 *(Medium · S · deps:
       none · issue: T-OIDC-3)*: `OpenIddict.EntityFrameworkCore` 5.7.0's `DeleteAsync` calls an EF
       Core `ExecuteDeleteAsync` overload missing at runtime against EF Core 9.0.6
       (`MissingMethodException`) — find the OpenIddict version actually compatible with EF Core 9
@@ -138,9 +138,9 @@ row in known-issues §1 by the same ID.
       store on top of HMAC; store-and-alert invalid receipts; replay tests.
 - [x] **T-SRV-2** Add `JsonSchema.Net` to `Directory.Packages.props`; validate service form
       submissions against `form_schema_json` server-side; JSend `fail` with per-field keys.
-- [ ] **T-INT-1** OpenCRVS `INationalIdProvider` adapter (GraphQL/REST) + contract tests.
+- [x] **T-INT-1** OpenCRVS `INationalIdProvider` adapter (GraphQL/REST) + contract tests.
 - [x] **T-INT-2** OTP provider failover ordering + spend alarm hooks.
-- [ ] Ministry health dashboard: scheduled `TestConnectionAsync` sweep → Admin KPIs.
+- [x] Ministry health dashboard: scheduled `TestConnectionAsync` sweep → Admin KPIs.
 - [x] **T-SRV-3** Submission gates + lifecycle integrity *(High · M · deps: T-AUTH-2 (loa claim) ·
       issue: T-SRV-3)*: enforce `RequiredLoa` (from the token's `loa` claim), eligibility, and
       required documents at submit (§5.4.1); transition guards on `ServiceRequestEntity`

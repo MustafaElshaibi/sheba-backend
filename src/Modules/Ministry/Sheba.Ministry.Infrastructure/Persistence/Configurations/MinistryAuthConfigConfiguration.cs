@@ -21,6 +21,10 @@ internal sealed class MinistryAuthConfigConfiguration : IEntityTypeConfiguration
         builder.Property(c => c.HealthCheckPath).HasColumnName("health_check_path");
         builder.Property(c => c.TimeoutSeconds).HasColumnName("timeout_seconds").HasDefaultValue(30);
         builder.Property(c => c.RetryCount).HasColumnName("retry_count").HasDefaultValue(3);
+        builder.Property(c => c.LastHealthCheckAt).HasColumnName("last_health_check_at");
+        builder.Property(c => c.LastHealthSuccess).HasColumnName("last_health_success");
+        builder.Property(c => c.LastHealthLatencyMs).HasColumnName("last_health_latency_ms");
+        builder.Property(c => c.LastHealthError).HasColumnName("last_health_error");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(c => c.UpdatedAt).HasColumnName("updated_at").IsRequired();
         builder.Ignore(c => c.DomainEvents);

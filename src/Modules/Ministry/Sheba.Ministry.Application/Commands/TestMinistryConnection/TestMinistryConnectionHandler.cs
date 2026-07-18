@@ -36,6 +36,8 @@ public sealed class TestMinistryConnectionHandler(
             // For None auth type, just do a plain HTTP GET
             if (authConfig.AuthType == MinistryAuthType.None)
             {
+                authConfig.RecordHealthCheck(true, 0, null);
+                await repository.SaveChangesAsync(ct);
                 return new TestMinistryConnectionResponse(true, null, 0, "No auth required — skipping test.");
             }
             throw new DomainException($"No adapter found for auth type '{adapterType}'.");
@@ -48,6 +50,9 @@ public sealed class TestMinistryConnectionHandler(
         var result = await adapter.TestConnectionAsync(authConfig, credential, ct);
 
         credential.RecordVerification();
+        // Persisted here so both this manual endpoint and the scheduled health sweep
+        // (MinistryHealthSweepJob, which drives this same handler) update one status record.
+        authConfig.RecordHealthCheck(result.Success, result.LatencyMs, result.Error);
         await repository.SaveChangesAsync(ct);
 
         logger.LogInformation(

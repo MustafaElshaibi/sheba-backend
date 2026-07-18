@@ -546,21 +546,25 @@ control of the account, the same recovery effect a successful login already has.
 ```csharp
 public interface INationalIdProvider           // Identity.Domain port
 {
-    string ProviderCode { get; }               // "Mock" | "CivilRegistryHttp" | "OpenCrvs"
-    Task<NidVerificationResult> VerifyCitizenAsync(string nationalId, string phoneNumber, CancellationToken ct);
-    Task<CitizenNidRecord?> GetCitizenDataAsync(string nationalId, CancellationToken ct);
-    Task<bool> IsAliveAsync(CancellationToken ct);
+    Task<NationalIdLookupResult> LookupAsync(
+        string nationalId, string phoneNumber, CancellationToken cancellationToken = default);
 }
+
+public enum NidStatus { Valid, Deceased, Suspended, Expired, NotFound }
 ```
 
-Selected by `NationalId:ActiveProvider` config (Options pattern). Implementations:
+Selected by `NationalId:ActiveProvider` config. Three implementations:
 `MockNationalIdProvider` (dev; 8 seeded citizens covering every rejection branch — valid ×4,
 deceased `1000000099`, suspended `1000000098`, expired `1000000097`, phone-mismatch `1000000096`),
-`HttpNationalIdProvider` (named client `CivilRegistry` + resilience pipeline). An OpenCRVS adapter
-is a planned third implementation (T-INT-1). Failure reasons (`NotFound`, `PhoneMismatch`,
-`Deceased`, `Suspended`, `InvalidFormat`) are logged and audited internally, never returned to the
-caller. Registry outage behavior: fail closed for onboarding (you cannot open an identity when the
-authoritative source is unreachable), fail open for login (login never consults the registry).
+`HttpNationalIdProvider` (`"Http"` — a plain REST adapter behind the named client `CivilRegistry`),
+and `OpenCrvsNationalIdProvider` (`"OpenCrvs"`, T-INT-1 — the second concrete shape: OAuth2
+client_credentials with a cached bearer token, against a GraphQL endpoint rather than REST; proves
+the port tolerates a materially different registry integration). `NidStatus.NotFound` covers both
+"no such NID" and "phone mismatch" deliberately — the two failures must be indistinguishable to
+the caller (no leakage of which check failed). Registry outage behavior: fail closed for onboarding
+(a network/GraphQL/non-2xx error propagates as an exception, never as `NotFound` — an outage must
+never read as "this citizen doesn't exist"), fail open for login (login never consults the
+registry).
 
 ### 6.6 Pluggable OTP provider
 
@@ -826,7 +830,14 @@ Full ERD: [diagrams/erd-ministry.mmd](diagrams/erd-ministry.mmd). Design points:
 (client_credentials with token caching in `cached_access_token` until expiry), **ApiKey**
 (header/query/cookie placement), **BearerToken**, **BasicAuth**, plus **None**. `Custom` is an open
 extension point; `Saml` is enum-reserved, implementation deferred (A8). Every adapter exposes
-`TestConnectionAsync` → the admin dashboard's per-ministry health/status.
+`TestConnectionAsync` → the admin dashboard's per-ministry health/status: on-demand via
+`POST /api/ministry/{id}/test-connection`, and on a schedule via `MinistryHealthSweepJob`
+(`ministry-health-sweep`, every 15 minutes — Hangfire recurring job registered in `Program.cs`)
+which drives the same `TestMinistryConnectionCommand` handler across every active
+`MinistryAuthConfig`. Each config's last result (`LastHealthCheckAt`/`LastHealthSuccess`/
+`LastHealthLatencyMs`/`LastHealthError`) is persisted on the config row itself and exposed
+cross-module to Admin via `IMinistryHealthProvider` (`GET /api/admin/analytics/ministry-health`,
+ministry-sliced per T-AUTH-3) — the same read-port pattern as `IIdentityStatsProvider`.
 
 ### 7.3 Outbound call flow
 
@@ -1313,8 +1324,8 @@ task-level checklist: [TASKS.md](../TASKS.md).
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
 | **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
-| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, ~~password reset~~, ~~RP self-service polish~~ | Threat-model §13.5 rows all mitigated in code |
-| **2 — Integration depth** | Webhook replay protection end-to-end (T-SRV-1), JSON-Schema form validation (T-SRV-2), OpenCRVS provider (T-INT-1), ministry health dashboard | A real external system round-trips a service request incl. async webhook |
+| **1 — Identity completion** *(complete)* | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, ~~password reset~~, ~~RP self-service polish~~, ~~ministry-admin scoping (T-AUTH-1/3)~~, ~~access-token hardening (T-SEC-5)~~, ~~authorize + consent (T-OIDC-1/2)~~, ~~relying-party delete fix (T-OIDC-3)~~, ~~account lifecycle (T-ID-1)~~, ~~citizen module (T-CIT-1)~~, ~~OTP generation to app layer (T-SEC-8)~~, ~~refresh-family reuse detection (T-SEC-9)~~ | Threat-model §13.5 rows all mitigated in code ✅ |
+| **2 — Integration depth** *(complete)* | ~~Webhook replay protection end-to-end (T-SRV-1)~~, ~~JSON-Schema form validation (T-SRV-2)~~, ~~OpenCRVS provider (T-INT-1)~~, ~~ministry health dashboard~~, ~~OTP failover ordering (T-INT-2)~~, ~~submission gates + lifecycle integrity (T-SRV-3)~~, ~~step-engine failure routing (T-SRV-4)~~, ~~ministry seed + outbound rate limit (T-MIN-1)~~ | A real external system round-trips a service request incl. async webhook ✅ |
 | **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
 | **4 — Audit & scale-readiness** | Audit hash-chain + INSERT-only + partitioning (T-AUD-1..3), BI rebuild tooling (T-ADM-1), test coverage to bar (testing.md), load test | Tamper-evidence demonstrable; p95 targets in [performance.md](performance.md) met |
 | **5 — Production migration** *(post-pilot)* | Real registry + SMS providers, TLS proxy, secrets store, backups, extraction of Notification (dry run of §3.4) | Pilot go-live checklist green |

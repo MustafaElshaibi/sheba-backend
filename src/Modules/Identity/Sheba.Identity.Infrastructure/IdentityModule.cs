@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 using Sheba.Identity.Application.Commands.ApproveIdentityRequest;
@@ -95,11 +96,22 @@ public static class IdentityModule
             sp => sp.GetRequiredService<IdentityDbContext>());
 
         // ── 2. NID adapter (civil registry) ────────────────────────────────────
+        services.AddMemoryCache();
+        services.Configure<OpenCrvsOptions>(configuration.GetSection(OpenCrvsOptions.SectionName));
+
         var nidProvider = configuration["NationalId:ActiveProvider"] ?? "Mock";
-        if (nidProvider == "Mock")
-            services.AddScoped<INationalIdProvider, MockNationalIdProvider>();
-        else
-            services.AddScoped<INationalIdProvider, HttpNationalIdProvider>();
+        switch (nidProvider)
+        {
+            case "OpenCrvs":
+                services.AddScoped<INationalIdProvider, OpenCrvsNationalIdProvider>();
+                break;
+            case "Mock":
+                services.AddScoped<INationalIdProvider, MockNationalIdProvider>();
+                break;
+            default:
+                services.AddScoped<INationalIdProvider, HttpNationalIdProvider>();
+                break;
+        }
 
         // ── 3. OTP adapter ─────────────────────────────────────────────────────
         // Keyed registrations so the failover composite (T-INT-2) can resolve providers by name.
@@ -124,13 +136,17 @@ public static class IdentityModule
         else
             services.AddScoped<IOtpProvider, ConsoleOtpProvider>();
 
-        // ── 4. Named HTTP client for HttpNationalIdProvider (future-proof) ──────
+        // ── 4. Named HTTP clients for the civil-registry adapters ──────────────
         services.AddHttpClient("CivilRegistry", client =>
         {
             var baseUrl = configuration["NationalId:BaseUrl"] ?? "https://localhost:7000";
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+        // OpenCrvsNationalIdProvider (T-INT-1) sets its own per-call timeout from
+        // OpenCrvsOptions.TimeoutSeconds; no BaseAddress here since both the token endpoint and
+        // the GraphQL endpoint are passed as absolute URLs from config.
+        services.AddHttpClient("OpenCrvs");
 
         // ── 5. Repository (IIdentityRepository → IdentityRepository) ──────────
         services.AddScoped<IIdentityRepository, IdentityRepository>();
@@ -179,10 +195,10 @@ public static class IdentityModule
                 server
                     .SetAuthorizationEndpointUris("/connect/authorize")
                     .SetTokenEndpointUris("/connect/token")
-                    .SetUserinfoEndpointUris("/connect/userinfo")
+                    .SetUserInfoEndpointUris("/connect/userinfo")
                     .SetIntrospectionEndpointUris("/connect/introspect")
                     .SetRevocationEndpointUris("/connect/revoke")
-                    .SetLogoutEndpointUris("/connect/logout");
+                    .SetEndSessionEndpointUris("/connect/logout");
 
                 // Supported grant types
                 server
@@ -252,8 +268,8 @@ public static class IdentityModule
                 server.UseAspNetCore()
                     .EnableAuthorizationEndpointPassthrough()
                     .EnableTokenEndpointPassthrough()
-                    .EnableUserinfoEndpointPassthrough()
-                    .EnableLogoutEndpointPassthrough()
+                    .EnableUserInfoEndpointPassthrough()
+                    .EnableEndSessionEndpointPassthrough()
                     .DisableTransportSecurityRequirement(); // allow HTTP in dev
             })
             .AddValidation(validation =>
@@ -676,7 +692,7 @@ public static class IdentityModule
             {
                 OpenIddictConstants.Permissions.Endpoints.Authorization,
                 OpenIddictConstants.Permissions.Endpoints.Token,
-                OpenIddictConstants.Permissions.Endpoints.Logout,
+                OpenIddictConstants.Permissions.Endpoints.EndSession,
                 OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
                 OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
                 OpenIddictConstants.Permissions.ResponseTypes.Code,

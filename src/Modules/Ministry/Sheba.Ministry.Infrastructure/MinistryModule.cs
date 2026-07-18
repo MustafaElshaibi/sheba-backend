@@ -84,6 +84,13 @@ public static class MinistryModule
         // never via Sheba.Ministry.Domain/Infrastructure directly (T-ARC-1) ──────
         services.AddScoped<IMinistryCallPort, MinistryCallPortAdapter>();
 
+        // ── 6. Cross-module health read port — Admin dashboard reads via this, never via
+        // MinistryDbContext directly (mirrors IIdentityStatsProvider/IdentityStatsAdapter) ─────
+        services.AddScoped<Sheba.Shared.Kernel.Interfaces.IMinistryHealthProvider, Adapters.MinistryHealthAdapter>();
+
+        // ── 7. Health sweep job (Hangfire-invoked; registered as a recurring job in Program.cs)
+        services.AddScoped<Jobs.MinistryHealthSweepJob>();
+
         return services;
     }
 

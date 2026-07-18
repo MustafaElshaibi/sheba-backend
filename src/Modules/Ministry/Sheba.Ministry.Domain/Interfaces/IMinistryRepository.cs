@@ -18,6 +18,8 @@ public interface IMinistryRepository
     // ── AuthConfig ────────────────────────────────────────────────────────
     Task<MinistryAuthConfig?> GetAuthConfigByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<MinistryAuthConfig>> GetAuthConfigsByMinistryAsync(Guid ministryId, CancellationToken ct = default);
+    /// <summary>All active auth configs across every ministry — feeds the health sweep job.</summary>
+    Task<List<MinistryAuthConfig>> GetAllActiveAuthConfigsAsync(CancellationToken ct = default);
     Task AddAuthConfigAsync(MinistryAuthConfig config, CancellationToken ct = default);
 
     // ── AuthCredential ────────────────────────────────────────────────────

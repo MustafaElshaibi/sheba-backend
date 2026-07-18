@@ -29,8 +29,11 @@
   </ItemGroup>
 
   <ItemGroup Label="OpenIddict">
-    <PackageVersion Include="OpenIddict.AspNetCore"                          Version="5.7.0" />
-    <PackageVersion Include="OpenIddict.EntityFrameworkCore"                 Version="5.7.0" />
+    <!-- 6.x is the first line built against EF Core 9. OpenIddict 5.7.0's DeleteAsync binds an
+         EF Core 8 ExecuteDeleteAsync overload that does not exist in EF Core 9.0.6, so every
+         application/token delete threw MissingMethodException at runtime (T-OIDC-3). -->
+    <PackageVersion Include="OpenIddict.AspNetCore"                          Version="6.4.0" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore"                 Version="6.4.0" />
   </ItemGroup>
 
   <ItemGroup Label="Cache">

@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Sheba.Admin.Application.Analytics.GetKpiSummary;
+using Sheba.Admin.Application.Analytics.GetMinistryHealth;
 using Sheba.Admin.Application.Analytics.GetRegistrationTrends;
 using Sheba.Admin.Application.Analytics.GetServiceRequestTrends;
 using Sheba.Admin.Infrastructure.Reports;
+using Sheba.Shared.Kernel.Interfaces;
 using Sheba.Shared.Kernel.Security;
 
 namespace Sheba.Admin.Infrastructure;
@@ -33,6 +35,16 @@ internal static class AdminEndpoints
         .WithName("GetKpiSummary")
         .WithSummary("Returns live platform KPIs for the admin dashboard")
         .Produces<KpiSummaryDto>(200);
+
+        // ── Ministry Health Dashboard ───────────────────────────────────────────
+        group.MapGet("/analytics/ministry-health", async (ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetMinistryHealthQuery(user.GetMinistryId()), ct);
+            return Results.Ok(result);
+        })
+        .WithName("GetMinistryHealth")
+        .WithSummary("Latest connectivity health per ministry auth config, from the scheduled sweep")
+        .Produces<IReadOnlyList<MinistryHealthSnapshot>>(200);
 
         // ── Registration Trends ────────────────────────────────────────────────
         group.MapGet("/analytics/trends/registrations", async (

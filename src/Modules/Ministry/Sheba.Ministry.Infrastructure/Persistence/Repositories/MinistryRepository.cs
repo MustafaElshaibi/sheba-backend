@@ -46,6 +46,12 @@ public sealed class MinistryRepository(MinistryDbContext db) : IMinistryReposito
             .Where(c => c.MinistryId == ministryId)
             .ToListAsync(ct);
 
+    public async Task<List<MinistryAuthConfig>> GetAllActiveAuthConfigsAsync(CancellationToken ct = default)
+        => await db.AuthConfigs
+            .Include(c => c.Credential)
+            .Where(c => c.IsActive)
+            .ToListAsync(ct);
+
     public async Task AddAuthConfigAsync(MinistryAuthConfig config, CancellationToken ct = default)
         => await db.AuthConfigs.AddAsync(config, ct);
 

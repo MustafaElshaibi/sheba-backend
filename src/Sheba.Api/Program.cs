@@ -16,6 +16,7 @@ using Sheba.Identity.Infrastructure;
 using Sheba.Identity.Infrastructure.Jobs;
 using Sheba.Identity.Infrastructure.Oidc;
 using Sheba.Ministry.Infrastructure;
+using Sheba.Ministry.Infrastructure.Jobs;
 using Sheba.Notification.Infrastructure;
 using Sheba.Payment.Infrastructure;
 using Sheba.ServiceRequest.Infrastructure;
@@ -283,6 +284,14 @@ try
         "sla-sweep",
         job => job.SweepAsync(CancellationToken.None),
         Cron.Hourly());
+
+    // Ministry health sweep (Phase 2 roadmap): exercise every active ministry auth config's
+    // TestConnectionAsync so the admin dashboard's health status doesn't go stale between
+    // manual "test connection" clicks.
+    RecurringJob.AddOrUpdate<MinistryHealthSweepJob>(
+        "ministry-health-sweep",
+        job => job.SweepAsync(CancellationToken.None),
+        "*/15 * * * *");
 
     // ── Run all module EF Core migrations + seed data on startup ────────────────────────────────
     // Wrapped so a transient DB outage does not prevent the API from serving Swagger/endpoints.

@@ -84,7 +84,7 @@ public static class RelyingPartyEndpoints
                 {
                     Permissions.Endpoints.Token,
                     Permissions.Endpoints.Authorization,
-                    Permissions.Endpoints.Logout,
+                    Permissions.Endpoints.EndSession,
                     Permissions.GrantTypes.AuthorizationCode,
                     Permissions.GrantTypes.RefreshToken,
                     Permissions.ResponseTypes.Code,

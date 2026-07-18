@@ -20,6 +20,12 @@ public sealed class MinistryAuthConfig : BaseEntity
     public int TimeoutSeconds { get; private set; } = 30;
     public int RetryCount { get; private set; } = 3;
 
+    // Health dashboard (ministry health sweep — Phase 2 roadmap item)
+    public DateTime? LastHealthCheckAt { get; private set; }
+    public bool? LastHealthSuccess { get; private set; }
+    public long? LastHealthLatencyMs { get; private set; }
+    public string? LastHealthError { get; private set; }
+
     // Navigation
     public MinistryAuthCredential? Credential { get; private set; }
 
@@ -72,5 +78,19 @@ public sealed class MinistryAuthConfig : BaseEntity
     {
         Credential = credential;
         Touch();
+    }
+
+    /// <summary>
+    /// Records the outcome of an IMinistryAuthAdapter.TestConnectionAsync call — used both by the
+    /// manual "test connection" endpoint and the scheduled health sweep. Deliberately does not
+    /// call Touch(): health status is operational telemetry, not a configuration edit, so it
+    /// should not bump UpdatedAt / show up as a config change.
+    /// </summary>
+    public void RecordHealthCheck(bool success, long latencyMs, string? error)
+    {
+        LastHealthCheckAt = DateTime.UtcNow;
+        LastHealthSuccess = success;
+        LastHealthLatencyMs = latencyMs;
+        LastHealthError = error;
     }
 }

@@ -6,7 +6,44 @@ All notable changes to Sheba are documented here. Format:
 
 ## [Unreleased]
 
+### Fixed
+- **`DELETE /api/admin/relying-parties/{clientId}` 500 (T-OIDC-3)**: bumped
+  `OpenIddict.AspNetCore`/`OpenIddict.EntityFrameworkCore` from `5.7.0` to `6.4.0` — the first line
+  built against EF Core 9 natively; 5.7.0's `ApplicationStore.DeleteAsync` bound an EF Core 8
+  `ExecuteDeleteAsync` overload absent at runtime under EF Core 9.0.6 (`MissingMethodException`).
+  The 6.x line also renamed several OpenIddict APIs used in this repo:
+  `SetUserinfoEndpointUris`/`EnableUserinfoEndpointPassthrough` → `SetUserInfoEndpointUris`/
+  `EnableUserInfoEndpointPassthrough`, and the `Logout` endpoint permission/URIs →
+  `EndSession` (`SetLogoutEndpointUris` → `SetEndSessionEndpointUris`,
+  `EnableLogoutEndpointPassthrough` → `EnableEndSessionEndpointPassthrough`,
+  `Permissions.Endpoints.Logout` → `Permissions.Endpoints.EndSession`) — updated at all call sites
+  in `IdentityModule.cs` and `RelyingPartyEndpoints.cs`. Verified end-to-end against a live
+  Postgres instance: register → delete → delete returns success and a follow-up GET 404s.
+  Full suite: `dotnet build` clean, `dotnet test` 207/207 passing.
+
 ### Added
+- **OpenCRVS `INationalIdProvider` adapter (T-INT-1)**: `OpenCrvsNationalIdProvider` — the second
+  concrete civil-registry integration shape, deliberately different from `HttpNationalIdProvider`'s
+  plain REST: OAuth2 client_credentials auth with a cached bearer token (`IMemoryCache`, 60s
+  refresh margin) against a GraphQL endpoint. `NationalId:ActiveProvider = "OpenCrvs"` selects it;
+  config lives under `NationalId:OpenCrvs` (`GraphQlEndpoint`, `TokenEndpoint`, `ClientId`,
+  `ClientSecret`, `TimeoutSeconds`). Registry outages (HTTP failures, non-2xx, GraphQL `errors`)
+  throw rather than returning `NotFound`, preserving the fail-closed-for-onboarding behavior
+  documented in sheba.md §6.5. 7 new contract tests against a hand-rolled `HttpMessageHandler`
+  stub (no HTTP-mocking package existed in the repo).
+
+- **Ministry health dashboard**: a new Hangfire recurring job, `MinistryHealthSweepJob`
+  (`ministry-health-sweep`, every 15 minutes), exercises `TestConnectionAsync` for every active
+  `MinistryAuthConfig` by driving the existing `TestMinistryConnectionCommand` handler — the same
+  code path the manual "test connection" endpoint uses, so there is one adapter-selection and
+  health-recording path for both triggers. Results persist on the auth config itself
+  (`LastHealthCheckAt`/`LastHealthSuccess`/`LastHealthLatencyMs`/`LastHealthError` — new nullable
+  columns, migration `MinistryHealthColumns`) and are exposed to the Admin module via a new
+  cross-module port, `IMinistryHealthProvider` (mirrors `IIdentityStatsProvider`), surfaced at
+  `GET /api/admin/analytics/ministry-health` and sliced by the caller's `ministry_id` claim
+  (T-AUTH-3 pattern — SuperAdmin/Auditor see every ministry). 10 new tests (domain entity, the
+  sweep job's fan-out/error-isolation, the cross-module adapter's ministry filtering).
+
 - **OTP provider failover + spend alarm hooks (T-INT-2)**: `ConsoleOtpProvider`/`TwilioOtpProvider`
   are now keyed DI registrations, and setting `Otp:ActiveProvider = "Failover"` selects a new
   `FailoverOtpProvider` composite that tries providers in `Otp:FailoverOrder` (default
