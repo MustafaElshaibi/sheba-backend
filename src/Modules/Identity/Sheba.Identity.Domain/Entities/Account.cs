@@ -141,6 +141,22 @@ public sealed class Account : BaseEntity
         Touch();
     }
 
+    /// <summary>
+    /// Sets a new password after a successful OTP-gated password-reset flow. Also clears lockout
+    /// counters — a citizen who just proved phone ownership via OTP has re-established control of
+    /// the account, the same recovery effect BR-LG-3 already gives a successful login.
+    /// </summary>
+    public void ResetPassword(string newPasswordHash)
+    {
+        if (Status != AccountStatus.Approved)
+            throw new DomainException($"Password reset is only available for approved accounts, not {Status}.");
+
+        PasswordHash     = newPasswordHash;
+        FailedLoginCount = 0;
+        LockedUntil      = null;
+        Touch();
+    }
+
     /// <summary>Raises the account's Level of Assurance after an approved upgrade request.</summary>
     public void UpgradeIdentityLevel(int newLevel)
     {

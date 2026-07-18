@@ -7,6 +7,33 @@ All notable changes to Sheba are documented here. Format:
 ## [Unreleased]
 
 ### Added
+- **Password reset flow (BR-LG-7)**: `POST /api/identity/password-reset/request` +
+  `POST /api/identity/password-reset/confirm`, gated on an OTP sent to the account's
+  **registry-registered** phone (never citizen-supplied, mirroring BR-ON-5) and only available to
+  `Approved` accounts (no other status can log in at all, per BR-ON-10, so there is nothing to
+  recover into). Both endpoints follow the BR-ON-3 anti-enumeration pattern: `request` always
+  returns the same generic message regardless of whether the identifier matches an account, and
+  `confirm` returns one identical generic error for every failure path (unknown identifier,
+  non-Approved account, no active/expired OTP, exhausted attempts, wrong code). A successful reset
+  also clears `FailedLoginCount`/`LockedUntil` — the same recovery effect a successful login
+  already gives under BR-LG-3. New `Account.ResetPassword` domain method, `RequestPasswordReset`/
+  `ConfirmPasswordReset` commands (Identity.Application), rate-limited with the existing
+  `IdentityRegister`/`IdentityOtp` policies respectively.
+
+  Found and fixed a pre-existing bug while live-verifying this flow (needed a real `Approved`
+  account to test against): `GET /api/admin/identity-requests` declared `int page, int pageSize`
+  with no defaults in its minimal-API lambda, so ASP.NET Core treated them as **required** query
+  parameters and threw `BadHttpRequestException` (500) on any call that omitted them — despite the
+  handler's own `page <= 0 ? 1 : page` fallback logic clearly intending them to be optional. Fixed
+  by giving both parameters `= 0` defaults so the existing fallback logic is reachable.
+
+  14 new tests (`Account.ResetPassword`, `RequestPasswordResetHandler`,
+  `ConfirmPasswordResetHandler`). **Verified live**: registered and approved a fresh citizen →
+  `password-reset/request` → OTP read from console log → `password-reset/confirm` → confirmed
+  `identity.otp_records.code_hash` for the `PasswordReset` purpose is a real Argon2id hash (not
+  plaintext) → logged in successfully with the new password. Full suite: `dotnet build` clean,
+  `dotnet test` 171/171 passing.
+
 - **OTP generation moved into the Application layer (T-SEC-8)**: new `IOtpCodeGenerator`
   (Shared.Kernel, implemented by `CryptoOtpCodeGenerator` in Identity.Infrastructure) generates
   numeric codes via `RandomNumberGenerator.GetInt32` (unbiased CSPRNG — replaces `ConsoleOtpProvider`'s

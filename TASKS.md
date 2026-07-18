@@ -81,8 +81,8 @@ row in known-issues §1 by the same ID.
 - [x] **T-SEC-5** Access-token hardening for external RPs in production: enable OpenIddict
       access-token encryption (or reference tokens + introspection); keep unencrypted JWTs in
       dev for inspectability.
-- [ ] Password reset flow (OTP-gated) + account recovery rules in
-      [docs/business-rules.md](docs/business-rules.md).
+- [x] Password reset flow (OTP-gated) + account recovery rules in
+      [docs/business-rules.md](docs/business-rules.md) (BR-LG-7).
 - [x] RP secret rotation endpoint + consent screen copy for `civil_data`.
 - [x] **T-OIDC-1** Implement `/connect/authorize` + consent *(High · L · deps: T-AUTH-2 ·
       issue: T-OIDC-1; pairs with the consent-screen bullet above)*: authorization-code + PKCE

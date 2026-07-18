@@ -516,6 +516,16 @@ Lockout: 5 failed passwords → exponential lock (`2^(n-4)` minutes). OTP: 6 dig
 (`RandomNumberGenerator`), Argon2id-hashed at rest, 5-minute TTL, 3 attempts, previous OTPs
 invalidated on re-issue, issuance rate-limited per account and per IP (§13.2).
 
+**Password reset** (BR-LG-7) reuses the same OTP machinery under a dedicated purpose
+(`OtpPurpose.PasswordReset`): `POST /api/identity/password-reset/request` looks up the account by
+username/NID and, only if it's `Approved`, sends a code to its registered phone —
+`RequestPasswordResetHandler` returns the identical generic response either way, so the endpoint
+can't be used to test which identifiers have accounts (BR-ON-3). `POST
+/api/identity/password-reset/confirm` verifies the code (`IOtpHasher`, same Argon2id compare every
+other OTP purpose uses) and calls `Account.ResetPassword`, which also clears
+`FailedLoginCount`/`LockedUntil` — proving phone ownership again is treated as re-establishing
+control of the account, the same recovery effect a successful login already has.
+
 ### 6.4 Token lifecycle & revocation
 
 - **Access tokens**: 15 min — short enough that revocation lag is bounded; RPs validate signature +
@@ -1173,9 +1183,11 @@ re-encryption.
 - OTP: 3 verification attempts per code; issuance capped (3 per 15 min per account, per-IP cap via
   Redis counters); previous codes invalidated on re-issue; codes are CSPRNG, hashed, 5-min TTL.
 - ASP.NET Core `RateLimiter` policies (T-SEC-2, implemented): Redis-backed sliding-window-log
-  limiters — `/api/identity/register` (5/5 min), `/api/identity/login` +
-  `/api/identity/login/verify-otp` (10/5 min), `/api/identity/verify-otp` (10/5 min),
-  `/connect/token` (30/min) — plus an in-memory global fallback (300/min per IP) on everything
+  limiters — `/api/identity/register` + `/api/identity/password-reset/request` (5/5 min, same
+  policy: both are identifier-based lookups), `/api/identity/login` +
+  `/api/identity/login/verify-otp` (10/5 min), `/api/identity/verify-otp` +
+  `/api/identity/password-reset/confirm` (10/5 min), `/connect/token` (30/min) — plus an in-memory
+  global fallback (300/min per IP) on everything
   else. Partitioned by caller IP via a Lua script (`ZREMRANGEBYSCORE`/`ZCARD`/`ZADD`/`PEXPIRE` on a
   per-partition sorted set) so the trim-count-add is atomic under concurrent requests and the
   counters survive process restarts / would coordinate correctly across future horizontal
@@ -1301,7 +1313,7 @@ task-level checklist: [TASKS.md](../TASKS.md).
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
 | **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
-| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, password reset, RP self-service polish | Threat-model §13.5 rows all mitigated in code |
+| **1 — Identity completion** | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, ~~password reset~~, ~~RP self-service polish~~ | Threat-model §13.5 rows all mitigated in code |
 | **2 — Integration depth** | Webhook replay protection end-to-end (T-SRV-1), JSON-Schema form validation (T-SRV-2), OpenCRVS provider (T-INT-1), ministry health dashboard | A real external system round-trips a service request incl. async webhook |
 | **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
 | **4 — Audit & scale-readiness** | Audit hash-chain + INSERT-only + partitioning (T-AUD-1..3), BI rebuild tooling (T-ADM-1), test coverage to bar (testing.md), load test | Tamper-evidence demonstrable; p95 targets in [performance.md](performance.md) met |

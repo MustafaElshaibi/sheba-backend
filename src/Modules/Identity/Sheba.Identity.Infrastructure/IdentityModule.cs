@@ -15,12 +15,14 @@ using OpenIddict.Validation.AspNetCore;
 using Sheba.Identity.Application.Commands.ApproveIdentityRequest;
 using Sheba.Identity.Application.Commands.CompleteRegistration;
 using Sheba.Identity.Application.Commands.ConfirmAdminMfa;
+using Sheba.Identity.Application.Commands.ConfirmPasswordReset;
 using Sheba.Identity.Application.Commands.CreateAdminUser;
 using Sheba.Identity.Application.Commands.EnrollAdminMfa;
 using Sheba.Identity.Application.Commands.LoginCitizen;
 using Sheba.Identity.Application.Commands.RegisterCitizen;
 using Sheba.Identity.Application.Commands.RejectIdentityRequest;
 using Sheba.Identity.Application.Commands.RequestLoaUpgrade;
+using Sheba.Identity.Application.Commands.RequestPasswordReset;
 using Sheba.Identity.Application.Commands.VerifyEmail;
 using Sheba.Identity.Application.Commands.VerifyLoginOtp;
 using Sheba.Identity.Application.Commands.VerifyOtp;
@@ -347,6 +349,27 @@ public static class IdentityModule
         .WithName("VerifyLoginOtp")
         .WithSummary("Login step 2: verify the login OTP. Token issuance happens via /connect/token.");
 
+        // ── Password reset (OTP-gated) ────────────────────────────────────────
+        citizen.MapPost("/password-reset/request", async (
+            RequestPasswordResetCommand command, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(command, ct);
+            return result.ToHttpResult();
+        })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityRegister) // identifier-based lookup — same posture as /register
+        .WithName("RequestPasswordReset")
+        .WithSummary("Step 1: sends a reset code to the account's registered phone, if one matches (generic response).");
+
+        citizen.MapPost("/password-reset/confirm", async (
+            ConfirmPasswordResetCommand command, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(command, ct);
+            return result.ToHttpResult();
+        })
+        .RequireRateLimiting(RateLimitPolicyNames.IdentityOtp) // T-SEC-2
+        .WithName("ConfirmPasswordReset")
+        .WithSummary("Step 2: verify the reset code and set a new password.");
+
         // LoA upgrade is a citizen action on their OWN account, so it needs a real principal —
         // separate group so it can require auth while the rest of `citizen` stays anonymous.
         var citizenAuthed = app.MapGroup("/api/identity").WithTags("Identity").RequireAuthorization("CitizenOnly")
@@ -454,9 +477,9 @@ public static class IdentityModule
         admin.MapGet("/", async (
             IMediator mediator,
             RequestStatus? status,
-            int page,
-            int pageSize,
-            CancellationToken ct) =>
+            int page = 0,
+            int pageSize = 0,
+            CancellationToken ct = default) =>
         {
             var result = await mediator.Send(
                 new GetIdentityRequestsQuery(status, page <= 0 ? 1 : page, pageSize <= 0 ? 20 : pageSize),

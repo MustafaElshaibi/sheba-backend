@@ -68,6 +68,15 @@ TOTP code or a single-use recovery code — in the same request as the password;
 keep the password-only baseline. 5 consecutive invalid codes lock the second factor for
 `2^(n-4)` minutes, mirroring BR-LG-3. A System Admin acting as a citizen uses their citizen
 account and citizen tokens.
+**BR-LG-7** Password reset (`POST /api/identity/password-reset/request` then `/confirm`) is
+OTP-gated to the account's **registry-registered** phone (never citizen-supplied, mirroring
+BR-ON-5) and only available to `Approved` accounts (BR-ON-10: no other status can log in, so
+there is nothing to recover into). Both steps return one identical generic response regardless of
+whether the identifier matches an account — the request step never reveals whether an account
+exists (BR-ON-3), and the confirm step's failure message is identical for an unknown identifier,
+an expired/missing code, an exhausted attempt count, or a wrong code. A successful reset also
+clears `FailedLoginCount`/`LockedUntil`, the same recovery effect BR-LG-3 already gives a
+successful login.
 
 ## 3. Levels of assurance
 
