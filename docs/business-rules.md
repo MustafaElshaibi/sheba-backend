@@ -160,8 +160,8 @@ immutable.
 **BR-PA-1** Fees come only from the service's fee schedule (validity-dated); no ad-hoc amounts.
 **BR-PA-2** Payment orders are idempotent per (request, fee set) — re-initiating returns the open
 order. Currency default YER.
-**BR-PA-3** Refunds (target, T-PAY-1) only against completed payments, only by System Admin, fully
-audited.
+**BR-PA-3** Refunds only against completed payments, only by System Admin (`SuperAdminOnly` policy
+on `POST /api/payments/{id}/refund`), fully audited.
 
 ## 8. Documents & wallet
 
@@ -170,8 +170,9 @@ a time-boxed access grant.
 **BR-DO-2** Downloads go through short-TTL presigned URLs — MinIO is never exposed directly.
 **BR-WA-1** The identity VC is issued automatically on approval; revoking an account (suspension/
 deactivation) revokes its VCs.
-**BR-WA-2** VCs are signed JWT-VCs verifiable against Sheba's published keys; revocation status is
-checkable via the wallet API.
+**BR-WA-2** VCs are signed JWT-VCs verifiable against Sheba's published keys (`POST
+/api/wallet/verify`, `GET /api/wallet/did/{did}` — both public, T-WAL-2); revocation status is
+checkable via the wallet API (`GET /api/wallet/credentials/{id}/revocation-status`, public).
 
 ## 9. Audit & notifications
 

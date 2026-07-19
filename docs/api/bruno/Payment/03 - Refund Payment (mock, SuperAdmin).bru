@@ -1,0 +1,20 @@
+meta {
+  name: Refund Payment (mock, SuperAdmin)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/payments/REPLACE_WITH_PAYMENT_ORDER_ID/refund
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  SuperAdminOnly (BR-PA-3). Refunds a completed payment order via the mock IPaymentGateway seam —
+  production PSP integration is deferred (T-PAY-1).
+}

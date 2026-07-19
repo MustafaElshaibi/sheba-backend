@@ -10,6 +10,7 @@ public class AdminDbContext : DbContext
 
     public DbSet<DailyRegistrationSnapshot> DailyRegistrationSnapshots => Set<DailyRegistrationSnapshot>();
     public DbSet<DailyServiceRequestSnapshot> DailyServiceRequestSnapshots => Set<DailyServiceRequestSnapshot>();
+    public DbSet<DailyRevenueSnapshot> DailyRevenueSnapshots => Set<DailyRevenueSnapshot>();
     public DbSet<ReportJob> ReportJobs => Set<ReportJob>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();

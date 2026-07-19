@@ -6,6 +6,56 @@ All notable changes to Sheba are documented here. Format:
 
 ## [Unreleased]
 
+### Added
+- **Bilingual notification templates (T-NOT-1)**: `NotificationTemplate` entity with
+  `BodyHtmlEn/Ar`, `BodyTextEn/Ar`, `SubjectEn/Ar` and a `Render(tokens)` method that combines
+  both languages into one bilingual email (LTR EN + RTL AR). New `INotificationTemplateService`
+  port in Shared.Kernel; implemented in `Notification.Infrastructure` and seeded with 6 templates:
+  `IdentityRequestApproved`, `IdentityRequestRejected`, `AccountSuspended`, `AccountReinstated`,
+  `AccountDeactivated`, `AdminNewIdentityRequest`. Template keys canonicalized in
+  `WellKnownTemplateKeys` (Shared.Kernel) so both Identity.Application (consumer) and
+  Notification.Infrastructure (seeder) reference the same source. All 6 Identity email handlers
+  updated to inject `INotificationTemplateService` and render via templates instead of hardcoded
+  HTML strings. New EF migration `AddNotificationTemplates` (schema `notification`). New
+  `Sheba.Notification.Tests` project (11 tests: domain render behavior + service unit tests).
+- **Persistent VC issuer key startup guard (T-WAL-1)**: `WalletModule.AddWalletModule` now takes
+  `IHostEnvironment`; in non-Development environments it throws `InvalidOperationException` at DI
+  registration time if `Wallet:IssuerPrivateKeyPem` is not configured — failing fast before any
+  credential operation. In Development, the auto-generated ephemeral key now logs a loud `Warning`
+  via `ILogger<RsaCredentialSigner>` noting that VCs won't survive a restart.
+- **Wallet VC verification/presentation (T-WAL-2)**: public (`AllowAnonymous`) `POST
+  /api/wallet/verify` — checks a presented VC-JWT's RS256 signature
+  (`ICredentialSigner.VerifyIssuerSignature`, new), expiry, and revocation, returning `isValid` +
+  a `reason` (never a 4xx/5xx, since a public verifier endpoint shouldn't error on attacker input).
+  New public `GET /api/wallet/credentials/{id}/revocation-status` (revocation only, no claims) and
+  `GET /api/wallet/did/{did}` (resolves the issuer or a citizen's DID document to its public key,
+  new `IWalletRepository.GetByDidAsync`). New owner-checked `GET /api/wallet/credentials/{id}`
+  (single-credential detail). New `Sheba.Wallet.Tests` project. Account-suspension/deactivation VC
+  revocation (BR-WA-1) was already implemented; this closes the remaining verification gap.
+- **Payment application layer (T-PAY-1)**: `Sheba.Payment.Application` implemented —
+  `CreatePaymentOrder` (internal, invoked by ServiceRequest via `IPaymentOrderPort`),
+  `ConfirmPayment` and `RefundPayment` commands + FluentValidation validators, `GetPaymentOrder`
+  query. New `IPaymentGateway` seam (`Payment:ActiveGateway` config, mirroring
+  `INationalIdProvider`/`IOtpProvider`) with a `MockPaymentGateway` implementation. New
+  `PaymentOrder.Refund()` domain method and `PaymentTransaction` audit log of every gateway
+  charge/refund call (new `payment.payment_transactions` table + `refunded_at`/`refund_reference`
+  columns on `payment_orders`, migration `AddPaymentTransactionsAndRefund`).
+- **`PaymentCompletedEvent` replaces the direct `MarkPaymentComplete` coupling (T-PAY-1)**:
+  `PaymentOrder.MarkPaid()` now raises `PaymentCompletedEvent` (Shared.Kernel) instead of
+  ServiceRequest calling back into the Payment port synchronously. ServiceRequest's
+  `MarkPaymentCompleteCommand`/`Handler` are deleted; a new
+  `AdvanceWorkflowOnPaymentCompletedHandler` (inbox-guarded) consumes the event to resume a
+  workflow paused at a Payment step. Admin's new `OnPaymentCompletedHandler` records the payment
+  into a `DailyRevenueSnapshot` (new `admin_data.analytics_revenue_daily` table, migration
+  `AddRevenueSnapshot`), surfaced as `TodayRevenue` on `GET /api/admin/analytics/kpis`.
+- **New `/api/payments` endpoints (T-PAY-1)**: `GET /{id}` (order detail), `POST /{id}/confirm`
+  (owner; mock gateway), `POST /{id}/refund` (`SuperAdminOnly`, BR-PA-3). Replaces
+  `POST /api/requests/payments/{id}/complete`, which is removed.
+- New `Sheba.Payment.Tests` project: `PaymentOrder` domain-transition tests, `ConfirmPayment`/
+  `RefundPayment` handler tests. Added coverage in `Sheba.ServiceRequest.Tests` (new
+  `AdvanceWorkflowOnPaymentCompletedHandler` tests) and `Sheba.Admin.Tests` (new
+  `OnPaymentCompletedHandler` tests).
+
 ### Fixed
 - **`DELETE /api/admin/relying-parties/{clientId}` 500 (T-OIDC-3)**: bumped
   `OpenIddict.AspNetCore`/`OpenIddict.EntityFrameworkCore` from `5.7.0` to `6.4.0` — the first line

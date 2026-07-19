@@ -311,8 +311,9 @@ required documents, workflow steps) and the runtime request lifecycle driven by 
 `ServiceRequiredDocument`, `ServiceWorkflowStep`, `ServiceRequestEntity`, `RequestStepExecution`.
 **Emits:** `ServiceRequestSubmittedEvent`, `WorkflowStepCompletedEvent`,
 `ServiceRequestCompletedEvent`.
-**Consumes:** payment completion (via `MarkPaymentComplete` command today; `PaymentCompletedEvent`
-in target design), ministry webhooks (`HandleWebhookCallback`).
+**Consumes:** `PaymentCompletedEvent` (T-PAY-1 — `AdvanceWorkflowOnPaymentCompletedHandler`
+resumes a workflow paused at a Payment step; replaces the old direct `MarkPaymentComplete`
+coupling into the Payment port), ministry webhooks (`HandleWebhookCallback`).
 **Lifecycle diagram:** [diagrams/service-request-lifecycle.mmd](diagrams/service-request-lifecycle.mmd) (rendered in §5.4.1)
 **ERD:** [diagrams/erd-servicerequest.mmd](diagrams/erd-servicerequest.mmd)
 
@@ -362,19 +363,36 @@ time-boxed access grants for reviewers. Virus scanning and per-object encryption
 
 **Responsibilities:** DID registry (`did:sheba:issuer`, `did:sheba:citizen:{id}`), credential
 schema registry, VC issuance as signed JWT-VC (RSA JWS per W3C VC Data Model + JOSE securing
-mechanism), revocation. On identity approval, `IssueCredentialOnApprovalHandler` automatically
-issues a `DigitalIdentityCredential` — the Singpass-style "citizen holds their own attested data"
-pattern.
+mechanism), revocation, and public verification/presentation (T-WAL-2, BR-WA-2): a relying party
+without a Sheba account presents a citizen's VC-JWT to `POST /api/wallet/verify` and gets back
+whether it is genuinely Sheba-issued (`ICredentialSigner.VerifyIssuerSignature`, RS256 against the
+issuer's own key), unexpired, and unrevoked — no ownership check, since the whole point of a
+presentation flow is a caller who isn't the credential's citizen. `GET
+/api/wallet/credentials/{id}/revocation-status` is a lighter-weight check by credential ID alone
+(no claims exposed); `GET /api/wallet/did/{did}` resolves either DID's public key so a verifier
+can also check the signature independently. On identity approval,
+`IssueCredentialOnApprovalHandler` automatically issues a `DigitalIdentityCredential` — the
+Singpass-style "citizen holds their own attested data" pattern. Revocation on account
+suspension/deactivation (BR-WA-1) is handled by `RevokeCredentialsOnAccountSuspensionHandler` /
+`RevokeCredentialsOnAccountDeactivationHandler`.
 **Key entities:** `DidDocument`, `CredentialSchema`, `VerifiableCredential`.
-**Consumes:** `IdentityRequestDecidedEvent(approved)`.
+**Consumes:** `IdentityRequestDecidedEvent(approved)`, `AccountSuspendedEvent`,
+`AccountDeactivatedEvent`.
 **ERD:** [diagrams/erd-wallet.mmd](diagrams/erd-wallet.mmd)
 
 ### 5.7 Payment
 
-**Responsibilities:** payment orders raised by the workflow `Payment` step; mock gateway now, real
-PSP later behind the same `IPaymentGateway` seam (T-PAY-1 builds the currently-empty application
-layer: CreateOrder/ConfirmPayment/Refund commands + `PaymentCompletedEvent`).
-**Key entities:** `PaymentOrder`, `PaymentTransaction`.
+**Responsibilities:** payment orders raised by the workflow `Payment` step; `CreatePaymentOrder`
+(internal, invoked by ServiceRequest via the `IPaymentOrderPort`), `ConfirmPayment` and
+`RefundPayment` commands (citizen/admin-facing, `POST /api/payments/{id}/confirm` and
+`/refund`) behind the `IPaymentGateway` seam. Mock gateway now (`MockPaymentGateway`,
+config-selected via `Payment:ActiveGateway`, always succeeds); real PSP later is a new adapter
+class + config entry, no code changes to the commands (T-PAY-1).
+**Emits:** `PaymentCompletedEvent` on `ConfirmPayment` — consumed by ServiceRequest (resume
+workflow) and Admin (revenue snapshot). Refunds raise no cross-module event today (the workflow
+has already advanced past the payment step by the time a refund can happen).
+**Key entities:** `PaymentOrder`, `PaymentTransaction` (audit log of every gateway charge/refund
+call).
 **ERD:** [diagrams/erd-payment.mmd](diagrams/erd-payment.mmd)
 
 ### 5.8 Notification
@@ -1127,7 +1145,7 @@ outright. Changed to `init` accessors so the outbox round-trip preserves identit
 | `ServiceRequestSubmittedEvent` | ServiceRequest | Notification, Admin (BI) | New request |
 | `WorkflowStepCompletedEvent` | ServiceRequest | Admin (BI) | Step progress |
 | `ServiceRequestCompletedEvent` | ServiceRequest | Notification, Admin (BI) | Fulfilment |
-| `PaymentCompletedEvent` *(planned, T-PAY-1)* | Payment | ServiceRequest (resume workflow), Admin | Replaces direct `MarkPaymentComplete` coupling |
+| `PaymentCompletedEvent` | Payment | ServiceRequest (resume workflow via `AdvanceWorkflowOnPaymentCompletedHandler`), Admin (`OnPaymentCompletedHandler` — revenue snapshot) | Replaced the old direct `MarkPaymentComplete` coupling (T-PAY-1) |
 | `CredentialIssuedEvent` *(planned)* | Wallet | Notification, Admin | VC issuance notice |
 | `MinistryWebhookReceivedEvent` *(planned)* | ServiceRequest | Audit | Signed callback receipt trail |
 
@@ -1326,7 +1344,7 @@ task-level checklist: [TASKS.md](../TASKS.md).
 | **0 — Hardening the base** *(complete)* | ~~JSend wrapper (T-API-1)~~, ~~per-module migrations (T-DB-1)~~, ~~outbox + dispatcher + inbox (T-EVT-1)~~, ~~rate limiting (T-SEC-2)~~, ~~shared-kernel `Result<T>`, adopted in Identity (T-STD-1)~~ | All endpoints emit JSend ✅; `docker compose up` from scratch migrates cleanly ✅; events survive process kill ✅; auth endpoints throttled ✅; Identity's expected failures are `Result<T>`, not exceptions ✅ |
 | **1 — Identity completion** *(complete)* | ~~Admin TOTP (T-SEC-1)~~, ~~signing-cert rotation (T-SEC-4)~~, ~~password reset~~, ~~RP self-service polish~~, ~~ministry-admin scoping (T-AUTH-1/3)~~, ~~access-token hardening (T-SEC-5)~~, ~~authorize + consent (T-OIDC-1/2)~~, ~~relying-party delete fix (T-OIDC-3)~~, ~~account lifecycle (T-ID-1)~~, ~~citizen module (T-CIT-1)~~, ~~OTP generation to app layer (T-SEC-8)~~, ~~refresh-family reuse detection (T-SEC-9)~~ | Threat-model §13.5 rows all mitigated in code ✅ |
 | **2 — Integration depth** *(complete)* | ~~Webhook replay protection end-to-end (T-SRV-1)~~, ~~JSON-Schema form validation (T-SRV-2)~~, ~~OpenCRVS provider (T-INT-1)~~, ~~ministry health dashboard~~, ~~OTP failover ordering (T-INT-2)~~, ~~submission gates + lifecycle integrity (T-SRV-3)~~, ~~step-engine failure routing (T-SRV-4)~~, ~~ministry seed + outbound rate limit (T-MIN-1)~~ | A real external system round-trips a service request incl. async webhook ✅ |
-| **3 — Money & credentials** | Payment application layer + `PaymentCompletedEvent` (T-PAY-1), VC verification/presentation API, notification templates (T-NOT-1) | Paid service completes end-to-end; VC verifies against JWKS/DID |
+| **3 — Money & credentials** *(in progress)* | ~~Payment application layer + `PaymentCompletedEvent` (T-PAY-1)~~, ~~VC verification/presentation API (T-WAL-2)~~, notification templates (T-NOT-1/T-NOT-2), persistent VC issuer key (T-WAL-1) | Paid service completes end-to-end ✅; VC verifies against JWKS/DID ✅ |
 | **4 — Audit & scale-readiness** | Audit hash-chain + INSERT-only + partitioning (T-AUD-1..3), BI rebuild tooling (T-ADM-1), test coverage to bar (testing.md), load test | Tamper-evidence demonstrable; p95 targets in [performance.md](performance.md) met |
 | **5 — Production migration** *(post-pilot)* | Real registry + SMS providers, TLS proxy, secrets store, backups, extraction of Notification (dry run of §3.4) | Pilot go-live checklist green |
 
@@ -1359,7 +1377,7 @@ Every capability/behavior from the project brief → where it is designed and wh
 | R19 | PII map, encryption, retention | §8.3 | All | Partially implemented (T-SEC-6/7) |
 | R20 | Tamper-evident audit logging | §5.9, §13.5 | Audit | Basic logging active (T-AUD-4: pipeline-registered, redacted snapshots); tamper-evidence T-AUD-1..3 still open |
 | R21 | Notifications email/SMS/push via provider abstraction | §5.8 | Notification | Partial — identity emails only, sent from the Identity module; no service-request notifications or delivery log (T-NOT-2); push deferred |
-| R22 | Payments & fees | §5.7 | Payment | Mock; T-PAY-1 |
+| R22 | Payments & fees | §5.7 | Payment | Implemented — CreateOrder/ConfirmPayment/Refund commands, `PaymentCompletedEvent` replaces the old direct coupling (T-PAY-1); gateway is still a mock (`IPaymentGateway`, no licensed PSP integration this phase, §5.7 A6) |
 | R23 | Wallet with W3C VCs | §5.6 | Wallet | Implemented (JWT-VC); issuer key ephemeral without config (T-WAL-1) |
 | R24 | Gateway responsibilities: routing, auth enforcement, rate limiting | §3.5, §5.11 | Gateway | Implemented (rate limiting T-SEC-2, CORS + correlation IDs T-GW-1); auth coverage gaps remain (T-AUTH-2) |
 | R25 | BI/dashboard backend — read model, recommendation + why | §12 | Admin | Implemented (event-fed read model) |

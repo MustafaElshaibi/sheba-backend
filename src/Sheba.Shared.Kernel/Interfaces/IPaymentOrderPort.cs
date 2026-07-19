@@ -22,9 +22,6 @@ public interface IPaymentOrderPort
         string currency,
         string? description,
         CancellationToken ct = default);
-
-    Task<PaymentOrderInfo> MarkPaidAsync(
-        Guid paymentOrderId, string? gatewayReference, CancellationToken ct = default);
 }
 
 /// <summary>Mirrors <c>Sheba.Payment.Domain.Enums.PaymentStatus</c> — kept in sync manually since

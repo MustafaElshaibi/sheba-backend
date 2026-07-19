@@ -561,11 +561,27 @@
           }
         },
         {
-          "name": "Mark Payment Complete (mock)",
+          "name": "Payment — Get Order",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/payments/REPLACE_WITH_PAYMENT_ORDER_ID", "host": ["{{baseUrl}}"], "path": ["api","payments","REPLACE_WITH_PAYMENT_ORDER_ID"] }
+          }
+        },
+        {
+          "name": "Payment — Confirm (mock)",
           "request": {
             "method": "POST",
             "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
-            "url": { "raw": "{{baseUrl}}/api/requests/payments/REPLACE_WITH_PAYMENT_ORDER_ID/complete", "host": ["{{baseUrl}}"], "path": ["api","requests","payments","REPLACE_WITH_PAYMENT_ORDER_ID","complete"] }
+            "url": { "raw": "{{baseUrl}}/api/payments/REPLACE_WITH_PAYMENT_ORDER_ID/confirm", "host": ["{{baseUrl}}"], "path": ["api","payments","REPLACE_WITH_PAYMENT_ORDER_ID","confirm"] }
+          }
+        },
+        {
+          "name": "Payment — Refund (mock, SuperAdmin)",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{admin_access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/payments/REPLACE_WITH_PAYMENT_ORDER_ID/refund", "host": ["{{baseUrl}}"], "path": ["api","payments","REPLACE_WITH_PAYMENT_ORDER_ID","refund"] }
           }
         },
         {
@@ -631,6 +647,40 @@
             "method": "GET",
             "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
             "url": { "raw": "{{baseUrl}}/api/wallet/credentials", "host": ["{{baseUrl}}"], "path": ["api","wallet","credentials"] }
+          }
+        },
+        {
+          "name": "Get Credential Detail",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{access_token}}" } ] },
+            "url": { "raw": "{{baseUrl}}/api/wallet/credentials/REPLACE_WITH_CREDENTIAL_ID", "host": ["{{baseUrl}}"], "path": ["api","wallet","credentials","REPLACE_WITH_CREDENTIAL_ID"] }
+          }
+        },
+        {
+          "name": "Verify Credential (public)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "none" },
+            "body": { "mode": "raw", "raw": "{\n  \"jwt\": \"REPLACE_WITH_VC_JWT\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/wallet/verify", "host": ["{{baseUrl}}"], "path": ["api","wallet","verify"] }
+          }
+        },
+        {
+          "name": "Get Revocation Status (public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "none" },
+            "url": { "raw": "{{baseUrl}}/api/wallet/credentials/REPLACE_WITH_CREDENTIAL_ID/revocation-status", "host": ["{{baseUrl}}"], "path": ["api","wallet","credentials","REPLACE_WITH_CREDENTIAL_ID","revocation-status"] }
+          }
+        },
+        {
+          "name": "Resolve DID Document (public)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "none" },
+            "url": { "raw": "{{baseUrl}}/api/wallet/did/did:sheba:issuer", "host": ["{{baseUrl}}"], "path": ["api","wallet","did","did:sheba:issuer"] }
           }
         },
         {

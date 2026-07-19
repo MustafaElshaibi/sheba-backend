@@ -21,5 +21,6 @@ public sealed record KpiSummaryDto(
     int PendingIdentityRequests,
     int TodayCompletions,
     decimal AvgApprovalHoursLast30Days,
-    int SlaBreachCount
+    int SlaBreachCount,
+    decimal TodayRevenue
 );

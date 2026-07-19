@@ -27,7 +27,9 @@ tags:
   - name: Admin — Service Catalog
   - name: Service Requests
   - name: Documents
+  - name: Payment
   - name: Wallet
+  - name: Wallet — Verification
   - name: Admin — Analytics & Reports
   - name: Audit
   - name: Webhooks
@@ -543,12 +545,27 @@ paths:
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses: { '200': { description: Advanced, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
 
-  /api/requests/payments/{paymentOrderId}/complete:
-    post:
-      tags: [Service Requests]
-      summary: "Mark your own payment complete (mock gateway)"
+  # ─────────────────────────── Payment (T-PAY-1) ───────────────────────────
+  /api/payments/{paymentOrderId}:
+    get:
+      tags: [Payment]
+      summary: "Get a payment order (owner or admin)"
       parameters: [ { name: paymentOrderId, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { '200': { description: Paid, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+      responses: { '200': { description: Order, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/payments/{paymentOrderId}/confirm:
+    post:
+      tags: [Payment]
+      summary: "Confirm your own payment order (mock gateway)"
+      parameters: [ { name: paymentOrderId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Confirmed, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/payments/{paymentOrderId}/refund:
+    post:
+      tags: [Payment]
+      summary: "Refund a completed payment order (SuperAdminOnly, mock gateway, BR-PA-3)"
+      parameters: [ { name: paymentOrderId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Refunded, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
 
   /api/admin/requests:
     get:
@@ -611,6 +628,38 @@ paths:
       tags: [Wallet]
       summary: "List the caller's Verifiable Credentials"
       responses: { '200': { description: VCs, content: { application/json: { schema: { $ref: '#/components/schemas/JSend_CredentialList' } } } } }
+
+  /api/wallet/credentials/{id}:
+    get:
+      tags: [Wallet]
+      summary: "Get a single Verifiable Credential owned by the caller (JWT + claims)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Credential, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/wallet/verify:
+    post:
+      tags: [Wallet — Verification]
+      summary: "Verify a presented VC-JWT's signature, expiry, and revocation (public, T-WAL-2)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { jwt: { type: string } }, required: [jwt] }
+      responses: { '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/wallet/credentials/{id}/revocation-status:
+    get:
+      tags: [Wallet — Verification]
+      summary: "Revocation status by credential ID (public, no claims exposed)"
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
+
+  /api/wallet/did/{did}:
+    get:
+      tags: [Wallet — Verification]
+      summary: "Resolve a did:sheba:* DID document to its public key (public)"
+      parameters: [ { name: did, in: path, required: true, schema: { type: string } } ]
+      responses: { '200': { description: DidDocument, content: { application/json: { schema: { $ref: '#/components/schemas/JSendSuccess' } } } } }
 
   /api/admin/wallet/credentials/issue:
     post:

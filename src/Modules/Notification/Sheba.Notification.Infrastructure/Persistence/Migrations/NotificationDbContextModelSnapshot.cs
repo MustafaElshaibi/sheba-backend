@@ -68,6 +68,64 @@ namespace Sheba.Notification.Infrastructure.Persistence.Migrations
                     b.ToTable("NotificationRecords", "notification");
                 });
 
+            modelBuilder.Entity("Sheba.Notification.Domain.Entities.NotificationTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BodyHtmlAr")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body_html_ar");
+
+                    b.Property<string>("BodyHtmlEn")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body_html_en");
+
+                    b.Property<string>("BodyTextAr")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body_text_ar");
+
+                    b.Property<string>("BodyTextEn")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body_text_en");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("SubjectAr")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject_ar");
+
+                    b.Property<string>("SubjectEn")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject_en");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("template_key");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateKey")
+                        .IsUnique();
+
+                    b.ToTable("notification_templates", "notification");
+                });
+
             modelBuilder.Entity("Sheba.Shared.Kernel.Outbox.InboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

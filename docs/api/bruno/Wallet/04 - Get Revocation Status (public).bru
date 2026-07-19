@@ -1,0 +1,16 @@
+meta {
+  name: Get Revocation Status (public)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/wallet/credentials/REPLACE_WITH_CREDENTIAL_ID/revocation-status
+  body: none
+  auth: none
+}
+
+docs {
+  Public (AllowAnonymous) — T-WAL-2. Cheap revocation check by credential ID alone; exposes no
+  claims or JWT.
+}

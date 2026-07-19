@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Sheba.Wallet.Domain.Interfaces;
 
 namespace Sheba.Wallet.Infrastructure.Credentials;
@@ -9,8 +10,10 @@ namespace Sheba.Wallet.Infrastructure.Credentials;
 /// <summary>
 /// Builds W3C Verifiable Credentials as RS256-signed JWTs using System.Security.Cryptography.
 ///
-/// The RSA private key is read from configuration (Wallet:IssuerPrivateKeyPem). If absent,
-/// a key is generated at startup (dev only — non-persistent across restarts).
+/// The RSA private key is read from configuration (Wallet:IssuerPrivateKeyPem).
+/// If absent in Development, an ephemeral key is generated — VCs issued in that session will
+/// NOT verify after a restart (T-WAL-1). In non-Development the module refuses to start
+/// without a configured key (enforced in WalletModule.AddWalletModule).
 ///
 /// JWT structure (VC-JWT per W3C VC Data Model 1.1):
 ///   header:  { alg: RS256, typ: JWT, kid: {issuerDid}#key-1 }
@@ -22,14 +25,25 @@ public sealed class RsaCredentialSigner : ICredentialSigner
     public string IssuerDid { get; }
     public string IssuerPublicKeyPem { get; }
 
-    public RsaCredentialSigner(IConfiguration configuration)
+    public RsaCredentialSigner(IConfiguration configuration, ILogger<RsaCredentialSigner> logger)
     {
         IssuerDid = configuration["Wallet:IssuerDid"] ?? "did:sheba:issuer";
 
         _rsa = RSA.Create(2048);
         var privatePem = configuration["Wallet:IssuerPrivateKeyPem"];
         if (!string.IsNullOrWhiteSpace(privatePem))
+        {
             _rsa.ImportFromPem(privatePem);
+        }
+        else
+        {
+            // WalletModule.AddWalletModule already blocks non-Development from reaching this
+            // path. The warning below is a belt-and-suspenders notice for dev/test sessions.
+            logger.LogWarning(
+                "[Wallet] Wallet:IssuerPrivateKeyPem is not configured. " +
+                "Using an ephemeral RSA key — VCs issued in this session will NOT verify " +
+                "after a restart. Set Wallet:IssuerPrivateKeyPem before going to production.");
+        }
 
         IssuerPublicKeyPem = _rsa.ExportSubjectPublicKeyInfoPem();
     }
@@ -82,6 +96,33 @@ public sealed class RsaCredentialSigner : ICredentialSigner
         var claimsJson = JsonSerializer.Serialize(credentialSubject);
 
         return new SignedCredential(jwt, IssuerDid, subjectDid, claimsJson, now.UtcDateTime, exp.UtcDateTime);
+    }
+
+    public bool VerifyIssuerSignature(string jwt)
+    {
+        var parts = jwt.Split('.');
+        if (parts.Length != 3)
+            return false;
+
+        try
+        {
+            var signingInput = $"{parts[0]}.{parts[1]}";
+            var signature = Base64UrlDecode(parts[2]);
+            return _rsa.VerifyData(
+                Encoding.ASCII.GetBytes(signingInput), signature,
+                HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static byte[] Base64UrlDecode(string value)
+    {
+        var padded = value.Replace('-', '+').Replace('_', '/');
+        padded += new string('=', (4 - padded.Length % 4) % 4);
+        return Convert.FromBase64String(padded);
     }
 
     private string BuildSignedJwt(

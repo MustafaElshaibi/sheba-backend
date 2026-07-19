@@ -1,17 +1,21 @@
-using Sheba.Payment.Domain.Entities;
-using Sheba.Payment.Domain.Enums;
+using MediatR;
+using Sheba.Payment.Application.Commands.CreatePaymentOrder;
 using Sheba.Payment.Domain.Interfaces;
 using Sheba.Shared.Kernel.Interfaces;
 
 namespace Sheba.Payment.Infrastructure.Adapters;
 
 /// <summary>
-/// Implements <see cref="IPaymentOrderPort"/> using <see cref="IPaymentRepository"/>. Lives in
-/// Payment.Infrastructure (which owns the payment schema). Registered in PaymentModule so any
-/// module that injects <see cref="IPaymentOrderPort"/> gets order data without touching
-/// Payment.Domain/Payment.Infrastructure directly (T-ARC-1).
+/// Implements <see cref="IPaymentOrderPort"/> so any module that injects it gets order data
+/// without touching Payment.Domain/Payment.Infrastructure directly (T-ARC-1). Reads go straight
+/// to the repository; the write path (order creation) delegates to
+/// <see cref="CreatePaymentOrderCommand"/> so the business rule (Payment.Application) has a
+/// single home instead of being duplicated between this adapter and the command handler
+/// (T-PAY-1). There is deliberately no MarkPaid/Confirm method on this port anymore — payment
+/// confirmation is now a Payment-owned endpoint that raises <c>PaymentCompletedEvent</c>, and
+/// ServiceRequest reacts to that event instead of calling back into Payment synchronously.
 /// </summary>
-public sealed class PaymentOrderPortAdapter(IPaymentRepository repository) : IPaymentOrderPort
+public sealed class PaymentOrderPortAdapter(IPaymentRepository repository, IMediator mediator) : IPaymentOrderPort
 {
     public async Task<PaymentOrderInfo?> GetByIdAsync(Guid paymentOrderId, CancellationToken ct = default)
     {
@@ -29,28 +33,16 @@ public sealed class PaymentOrderPortAdapter(IPaymentRepository repository) : IPa
         Guid serviceRequestId, Guid citizenId, decimal totalAmount, string currency, string? description,
         CancellationToken ct = default)
     {
-        var order = PaymentOrder.Create(serviceRequestId, citizenId, totalAmount, currency, description);
-        await repository.AddAsync(order, ct);
-        await repository.SaveChangesAsync(ct);
-        return ToInfo(order);
+        var dto = await mediator.Send(
+            new CreatePaymentOrderCommand(serviceRequestId, citizenId, totalAmount, currency, description), ct);
+
+        return new PaymentOrderInfo(
+            dto.Id, dto.ServiceRequestId, dto.CitizenId, dto.OrderNumber,
+            dto.TotalAmount, dto.Currency, Enum.Parse<PaymentOrderStatus>(dto.Status),
+            dto.PaymentUrl, dto.GatewayReference);
     }
 
-    public async Task<PaymentOrderInfo> MarkPaidAsync(
-        Guid paymentOrderId, string? gatewayReference, CancellationToken ct = default)
-    {
-        var order = await repository.GetByIdAsync(paymentOrderId, ct)
-            ?? throw new InvalidOperationException($"PaymentOrder {paymentOrderId} not found.");
-
-        if (order.Status != PaymentStatus.Completed)
-        {
-            order.MarkPaid(gatewayReference);
-            await repository.SaveChangesAsync(ct);
-        }
-
-        return ToInfo(order);
-    }
-
-    private static PaymentOrderInfo ToInfo(PaymentOrder order) => new(
+    private static PaymentOrderInfo ToInfo(Domain.Entities.PaymentOrder order) => new(
         order.Id, order.ServiceRequestId, order.CitizenId, order.OrderNumber,
         order.TotalAmount, order.Currency, (PaymentOrderStatus)(int)order.Status,
         order.PaymentUrl, order.GatewayReference);

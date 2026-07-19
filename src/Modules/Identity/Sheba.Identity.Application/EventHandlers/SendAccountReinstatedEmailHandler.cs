@@ -8,10 +8,12 @@ namespace Sheba.Identity.Application.EventHandlers;
 
 /// <summary>
 /// Notifies the citizen by email when an admin lifts a security hold on their account.
+/// Sends a bilingual email using the AccountReinstated template (T-NOT-1).
 /// </summary>
 public sealed class SendAccountReinstatedEmailHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    INotificationTemplateService templateService,
     IInboxGuard inboxGuard,
     ILogger<SendAccountReinstatedEmailHandler> logger
 ) : INotificationHandler<AccountReinstatedEvent>
@@ -27,17 +29,17 @@ public sealed class SendAccountReinstatedEmailHandler(
         if (account is null || string.IsNullOrWhiteSpace(account.Email))
             return;
 
+        var rendered = await templateService.RenderAsync(
+            WellKnownTemplateKeys.AccountReinstated,
+            new Dictionary<string, string>(),
+            cancellationToken);
+
         var sent = await emailService.SendAsync(
-            toAddress:  account.Email,
-            toName:     account.FullNameEn ?? account.FullNameAr ?? "Citizen",
-            subject:    "✅ Sheba account reinstated",
-            htmlBody:
-                """
-                <h2>Account Reinstated</h2>
-                <p>Dear citizen,</p>
-                <p>Your Sheba account has been <strong>reinstated</strong>. You can now log in as usual.</p>
-                """,
-            textBody:   "Your Sheba account has been reinstated. You can now log in as usual.",
+            toAddress:         account.Email,
+            toName:            account.FullNameEn ?? account.FullNameAr ?? "Citizen",
+            subject:           rendered.Subject,
+            htmlBody:          rendered.HtmlBody,
+            textBody:          rendered.TextBody,
             cancellationToken: cancellationToken);
 
         if (sent)

@@ -36,10 +36,7 @@ Every endpoint is tagged so you never build against something that isn't there.
 3. **Notification API** (`/api/notifications/...`) — `NotificationModule.MapNotificationEndpoints`
    maps nothing; a `GET /api/notifications/{accountId}` is a code TODO. Notifications are delivered
    out-of-band (email/SMS), not fetched. → 🟣
-4. **Standalone Payment API** — `PaymentModule.MapPaymentEndpoints` maps nothing. The only
-   payment-related route is `POST /api/requests/payments/{paymentOrderId}/complete` (a **mock**
-   gateway callback) owned by the ServiceRequest module. → 🟡 (mock)
-5. **MFA challenge at login** is enforced inside the `urn:sheba:grant:admin_password` token grant,
+4. **MFA challenge at login** is enforced inside the `urn:sheba:grant:admin_password` token grant,
    not as a separate endpoint.
 
 ---
@@ -1253,18 +1250,25 @@ or missing required documents).
 { "status": "success", "data": { "completed": false, "currentStep": 3, "status": "AwaitingMinistry", "paymentUrl": null, "message": "Advanced to ministry API call." } }
 ```
 
-#### ✅ POST `/api/requests/payments/{paymentOrderId}/complete`
+#### ✅ Payment — `/api/payments` (T-PAY-1)
 
-- **Auth:** any authenticated principal; ownership enforced in handler. **Mock** gateway callback.
-- **Body:** none needed from the client (the command's `GatewayReference` is optional and not bound
-  from the route). Send an empty body.
+Payment confirmation moved off `/api/requests/*` and is now owned by the Payment module. All
+three routes require any authenticated principal; ownership is enforced in the handler (a citizen
+sees only their own order; admins see any).
+
+- **GET `/{paymentOrderId}`** — order detail.
+- **POST `/{paymentOrderId}/confirm`** — confirms the caller's own order via the **mock**
+  gateway (`IPaymentGateway`; no real PSP integration this phase). Send an empty body. Idempotent:
+  confirming an already-completed order returns its current state without calling the gateway
+  again. On success, raises `PaymentCompletedEvent`, which resumes the paused ServiceRequest
+  workflow — there is no more direct `requestId`/"advance workflow" response here; poll
+  `GET /api/requests/{id}` for the resumed state.
+- **POST `/{paymentOrderId}/refund`** — **`SuperAdminOnly`** (BR-PA-3). Refunds a completed order
+  via the mock gateway.
 
 ```json
-{ "status": "success", "data": { "requestId": "…", "message": "Payment recorded. Your request is now processing." } }
+{ "status": "success", "data": { "id": "…", "serviceRequestId": "…", "citizenId": "…", "orderNumber": "PAY-20260718-ABCD1234", "totalAmount": 1500.00, "currency": "YER", "status": "Completed", "paymentUrl": "/api/payments/…/pay", "gatewayReference": "MOCK-…", "paidAt": "2026-07-18T10:00:00Z", "refundedAt": null, "refundReference": null } }
 ```
-
-**Notes:** This simulates a successful payment for the caller's own order and advances the workflow.
-There is no real PSP integration (T-PAY-1).
 
 #### ✅ GET `/api/admin/requests`
 
@@ -1361,6 +1365,52 @@ Source: `WalletModule.cs`.
 
 **Notes:** `jwt` is a signed JWT-VC (W3C VC Data Model). `claims` is the decoded credentialSubject
 for convenience. Present the `jwt` to verifiers; render `claims` in the UI.
+
+#### ✅ GET `/api/wallet/credentials/{id}`
+
+- **Policy:** `CitizenOnly`, ownership-checked (own credential only, 404 otherwise). Same shape as
+  one item of the list above.
+
+#### ✅ POST `/api/wallet/verify` — public (T-WAL-2)
+
+- **Auth:** none (`AllowAnonymous`) — a relying party verifying a citizen's presented VC has no
+  Sheba account.
+- **Body:** `{ "jwt": "eyJhbGciOiJSUzI1Ni..." }`.
+
+```json
+{
+  "status": "success",
+  "data": {
+    "isValid": true, "reason": null, "credentialId": "…",
+    "credentialType": "DigitalIdentityCredential", "issuerDid": "did:sheba:issuer",
+    "subjectDid": "did:sheba:citizen:3fa8…",
+    "claims": { "name": "Ahmed Al-Yemeni", "loa": 1 },
+    "issuedAt": "2026-07-18T09:05:00Z", "expiresAt": "2027-07-18T09:05:00Z"
+  }
+}
+```
+
+**Notes:** always **200** — `isValid: false` with a `reason` ("Malformed credential.", "Signature
+verification failed.", "Credential not recognized.", "Credential has been revoked.", "Credential
+has expired.") covers every failure mode; there's nothing to 4xx/5xx over on a public verifier
+endpoint. `claims`/dates are `null` when `isValid` is `false`.
+
+#### ✅ GET `/api/wallet/credentials/{id}/revocation-status` — public
+
+- **Auth:** none. Lightweight check by credential ID alone — no claims, no JWT.
+
+```json
+{ "status": "success", "data": { "credentialId": "…", "isRevoked": false, "revokedAt": null } }
+```
+
+#### ✅ GET `/api/wallet/did/{did}` — public
+
+- **Auth:** none. Resolves `did:sheba:issuer` or `did:sheba:citizen:{id}` to its public key, so a
+  verifier can independently check a VC-JWT's RS256 signature (BR-WA-2).
+
+```json
+{ "status": "success", "data": { "did": "did:sheba:issuer", "publicKeyPem": "-----BEGIN PUBLIC KEY-----…", "isActive": true } }
+```
 
 #### ✅ POST `/api/admin/wallet/credentials/issue`
 
@@ -1466,7 +1516,6 @@ Source: `AdminEndpoints.cs`, `AuditModule.cs`.
 |-------|--------|-------|
 | `/api/citizens/*` (profile read/update) | 🟣 | `UpdateProfileCommand` exists; no route. Profile auto-created on approval. |
 | `/api/notifications/{accountId}` | 🟣 | Planned citizen notification history; not mapped. Notifications are email/SMS only. |
-| `/api/payments/*` (standalone) | 🟡 | Only `POST /api/requests/payments/{id}/complete` exists (mock). |
 | `/api/identity/password-reset/*` | 🟡 | Commands exist; routes not mapped (404). |
 | Client-controlled sorting / free-text search | 🟣 | Not supported on any endpoint. |
 

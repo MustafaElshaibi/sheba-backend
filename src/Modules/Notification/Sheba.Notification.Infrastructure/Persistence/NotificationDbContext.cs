@@ -14,6 +14,7 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
     : DbContext(options)
 {
     public DbSet<NotificationRecord> NotificationRecords => Set<NotificationRecord>();
+    public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 

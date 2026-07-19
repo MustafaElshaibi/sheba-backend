@@ -23,6 +23,7 @@ public sealed class GetKpiSummaryHandler(
         var todayCompletions = await analyticsRepo.GetTodayCompletionsAsync(request.MinistryId, ct);
         var avgApprovalHours = await analyticsRepo.GetAvgApprovalHoursLast30DaysAsync(ct);
         var slaBreachCount = await analyticsRepo.GetSlaBreachCountLast30DaysAsync(request.MinistryId, ct);
+        var todayRevenue = await analyticsRepo.GetTodayRevenueAsync(ct: ct);
 
         logger.LogDebug(
             "[GetKpiSummary] Accounts={Accounts} Pending={Pending} TodayCompletions={Completions}",
@@ -33,6 +34,7 @@ public sealed class GetKpiSummaryHandler(
             PendingIdentityRequests: pendingRequests,
             TodayCompletions: todayCompletions,
             AvgApprovalHoursLast30Days: avgApprovalHours,
-            SlaBreachCount: slaBreachCount);
+            SlaBreachCount: slaBreachCount,
+            TodayRevenue: todayRevenue);
     }
 }

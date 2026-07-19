@@ -166,12 +166,20 @@ row in known-issues §1 by the same ID.
 
 ## Phase 3 — Money & credentials
 
-- [ ] **T-PAY-1** Payment application layer: `CreatePaymentOrder` / `ConfirmPayment` / `Refund`
+- [x] **T-PAY-1** Payment application layer: `CreatePaymentOrder` / `ConfirmPayment` / `Refund`
       commands + validators; `PaymentCompletedEvent` consumed by the ServiceRequest workflow
       (delete the direct `MarkPaymentComplete` coupling); `IPaymentGateway` seam + mock gateway.
-- [ ] Wallet: VC verification + presentation endpoints; revocation-status API; revoke VCs on
-      account suspension/deactivation (BR-WA-1).
-- [ ] **T-NOT-1** Implement `NotificationTemplate` (bilingual) + template-keyed sends; replace
+- [x] **T-WAL-2** Wallet: VC verification + presentation endpoints; revocation-status API; revoke
+      VCs on account suspension/deactivation (BR-WA-1) *(issue: T-WAL-2)*: public
+      `POST /api/wallet/verify` (signature via `ICredentialSigner.VerifyIssuerSignature` + expiry +
+      revocation), public `GET /api/wallet/credentials/{id}/revocation-status`, public
+      `GET /api/wallet/did/{did}` (issuer/citizen key resolution), owner-checked
+      `GET /api/wallet/credentials/{id}` (single-credential detail). Account-suspension/deactivation
+      revocation (BR-WA-1) was already wired via `RevokeCredentialsOnAccount{Suspension,Deactivation}Handler`
+      — this task closes the remaining verification/presentation gap.
+      AC: a genuine Sheba-issued JWT verifies true; a tampered/foreign/expired/revoked one verifies
+      false with a reason, never a 4xx/5xx; revocation-status and DID resolution work without auth.
+- [x] **T-NOT-1** Implement `NotificationTemplate` (bilingual) + template-keyed sends; replace
       hardcoded message strings; implement the `Notification` in-app entity or delete the stub.
 - [ ] **T-NOT-2** Notification ownership *(Medium · M · deps: T-ARC-1 · issue: T-NOT-2;
       complements T-NOT-1)*: move the identity email handlers out of Identity.Application into
@@ -181,7 +189,7 @@ row in known-issues §1 by the same ID.
       Notification.Domain.
       AC: Identity.Application contains no email-sending handlers; submitting/completing a
       request notifies the citizen; every send is logged in `notification_records`.
-- [ ] **T-WAL-1** Persistent VC issuer key *(Medium · S · deps: none · issue: T-WAL-1)*: require
+- [x] **T-WAL-1** Persistent VC issuer key *(Medium · S · deps: none · issue: T-WAL-1)*: require
       `Wallet:IssuerPrivateKeyPem` outside Development (fail fast at startup); keep dev
       auto-generation behind a loud warning; document rotation alongside T-SEC-4.
       AC: production-mode boot without a configured key fails with a clear error; with a

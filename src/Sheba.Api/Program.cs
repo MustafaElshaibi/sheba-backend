@@ -63,7 +63,7 @@ try
         .AddMinistryModule(builder.Configuration)
         .AddServiceRequestModule(builder.Configuration)
         .AddDocumentModule(builder.Configuration)
-        .AddWalletModule(builder.Configuration)
+        .AddWalletModule(builder.Configuration, builder.Environment)
         .AddPaymentModule(builder.Configuration)
         .AddNotificationModule(builder.Configuration)
         .AddAuditModule(builder.Configuration)
@@ -89,6 +89,7 @@ try
             typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
             typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,
             typeof(Sheba.Wallet.Application.Commands.IssueIdentityCredential.IssueIdentityCredentialCommand).Assembly,
+            typeof(Sheba.Payment.Application.Commands.CreatePaymentOrder.CreatePaymentOrderCommand).Assembly,
             typeof(Sheba.Admin.Application.Analytics.GetKpiSummary.GetKpiSummaryQuery).Assembly,
             typeof(Sheba.Audit.Application.Queries.GetAuditLog.GetAuditLogQuery).Assembly));
 
@@ -126,6 +127,7 @@ try
         typeof(Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest.SubmitServiceRequestCommand).Assembly,
         typeof(Sheba.Document.Application.Commands.UploadDocument.UploadDocumentCommand).Assembly,
         typeof(Sheba.Wallet.Application.Commands.IssueIdentityCredential.IssueIdentityCredentialCommand).Assembly,
+        typeof(Sheba.Payment.Application.Commands.CreatePaymentOrder.CreatePaymentOrderCommand).Assembly,
         typeof(Sheba.Admin.Application.Analytics.GetKpiSummary.GetKpiSummaryQuery).Assembly
     ]);
 
@@ -301,6 +303,7 @@ try
         await IdentityModule.SeedIdentityAsync(app);
         await MinistryModule.SeedMinistriesAsync(app); // must run before the service catalog (T-MIN-1)
         await ServiceRequestModule.SeedServiceCatalogAsync(app);
+        await NotificationModule.SeedTemplatesAsync(app); // T-NOT-1
     }
     catch (Exception dbEx)
     {

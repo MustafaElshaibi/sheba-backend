@@ -159,18 +159,26 @@ CRUD ministries + sub-ministries, `/{id}/auth-configs` (+ credentials, write-onl
 
 ### ServiceRequest — `/api/services`, `/api/requests` (+ `/api/admin/...` mirrors)
 Citizen: browse catalog, submit request (validates LoA/eligibility/documents), my-requests,
-request detail, cancel, pay-callback. Admin: category/service CRUD, publish, fees, workflow steps,
-all-requests, review actions, webhook receiver path.
+request detail, cancel. Payment confirmation is a Payment-module endpoint, not a ServiceRequest
+one — see `/api/payments` below (T-PAY-1). Admin: category/service CRUD, publish, fees, workflow
+steps, all-requests, review actions, webhook receiver path.
 
 ### Document — `/api/documents`
 Upload (multipart), my-documents, presigned download URL, delete (soft). Citizen-owned; grants for
 reviewers.
 
 ### Wallet — `/api/wallet`
-My credentials, credential detail (JWT + claims), verify endpoint (target), revocation status.
+`GET /credentials` (my credentials), `GET /credentials/{id}` (detail, JWT + claims) — both
+`CitizenOnly`, owner-checked. Public (`AllowAnonymous`) verification/presentation surface
+(T-WAL-2): `POST /verify` (signature + expiry + revocation), `GET
+/credentials/{id}/revocation-status` (revocation only, no claims), `GET /did/{did}` (issuer/citizen
+DID resolution).
 
 ### Payment — `/api/payments`
-Order detail, mock pay action (`/{id}/pay`), (target T-PAY-1: create/confirm/refund).
+`GET /{id}` order detail (owner or admin), `POST /{id}/confirm` (owner; mock gateway),
+`POST /{id}/refund` (SuperAdminOnly; mock gateway, BR-PA-3). Order creation is internal — driven
+by the ServiceRequest workflow's Payment step via `IPaymentOrderPort`, not a public endpoint
+(T-PAY-1).
 
 ### Audit / Admin — `/api/admin/audit`, `/api/admin`
 Audit search (Auditor+); KPI summary, time-series, report jobs CRUD + download (SystemAdmin;

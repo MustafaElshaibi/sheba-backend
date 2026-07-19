@@ -12,7 +12,6 @@ using Sheba.ServiceRequest.Application.Commands.CreateServiceCategory;
 using Sheba.ServiceRequest.Application.Commands.CreateServiceDefinition;
 using Sheba.ServiceRequest.Application.Commands.ExecuteNextStep;
 using Sheba.ServiceRequest.Application.Commands.HandleWebhookCallback;
-using Sheba.ServiceRequest.Application.Commands.MarkPaymentComplete;
 using Sheba.ServiceRequest.Application.Commands.SetServiceFee;
 using Sheba.ServiceRequest.Application.Commands.SubmitServiceRequest;
 using Sheba.ServiceRequest.Application.Commands.UpdateServiceDefinition;
@@ -206,17 +205,10 @@ public static class ServiceRequestModule
         .WithSummary("Manually execute the next workflow step for a request (admin/operator action).");
 
         // ── Payment ──────────────────────────────────────────────────────────
-        requests.MapPost("/payments/{paymentOrderId:guid}/complete", async (
-            Guid paymentOrderId, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
-        {
-            var isAdmin = user.GetRole() != "Citizen";
-            var result = await mediator.Send(
-                new MarkPaymentCompleteCommand(paymentOrderId, user.RequireSubjectId(), isAdmin), ct);
-            return Results.Ok(result);
-        })
-        .RequireAuthorization() // any authenticated principal; ownership enforced in the handler
-        .WithName("MarkPaymentComplete")
-        .WithSummary("Mark your own payment as completed (mock gateway callback).");
+        // Payment confirmation is now owned by the Payment module (POST /api/payments/{id}/confirm,
+        // T-PAY-1) — it raises PaymentCompletedEvent, which AdvanceWorkflowOnPaymentCompletedHandler
+        // in this module's Application layer consumes to resume the workflow. No endpoint here
+        // anymore; see PaymentModule.MapPaymentEndpoints.
 
         // ── Webhook Receiver ─────────────────────────────────────────────────
         // Public by design: ministry systems cannot present a Sheba bearer token, so this

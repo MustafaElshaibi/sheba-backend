@@ -1,0 +1,23 @@
+meta {
+  name: Confirm Payment (mock)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/payments/REPLACE_WITH_PAYMENT_ORDER_ID/confirm
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Any authenticated principal; ownership enforced in the handler. Confirms the caller's own order
+  via the mock IPaymentGateway seam — production PSP integration is deferred (T-PAY-1).
+  Idempotent: confirming an already-completed order returns its current state without calling the
+  gateway again. On success raises PaymentCompletedEvent, which resumes the paused ServiceRequest
+  workflow — poll GET /api/requests/{id} for the resumed state.
+}

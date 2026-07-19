@@ -80,6 +80,53 @@ namespace Sheba.Admin.Infrastructure.Persistence.Migrations
                     b.ToTable("analytics_identity_daily", "admin_data");
                 });
 
+            modelBuilder.Entity("Sheba.Admin.Domain.Entities.DailyRevenueSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<int>("PaymentsCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("payments_completed");
+
+                    b.Property<decimal>("TotalAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("total_amount");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_analytics_revenue_daily");
+
+                    b.HasIndex("Date", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("ix_analytics_revenue_daily_date_currency");
+
+                    b.ToTable("analytics_revenue_daily", "admin_data");
+                });
+
             modelBuilder.Entity("Sheba.Admin.Domain.Entities.DailyServiceRequestSnapshot", b =>
                 {
                     b.Property<Guid>("Id")

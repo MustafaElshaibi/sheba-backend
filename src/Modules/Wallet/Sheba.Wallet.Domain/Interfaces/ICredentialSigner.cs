@@ -31,4 +31,9 @@ public interface ICredentialSigner
 
     /// <summary>Builds a W3C VC JWT for the given identity claims and signs it with RS256.</summary>
     SignedCredential SignIdentityCredential(IdentityCredentialClaims claims, TimeSpan validity);
+
+    /// <summary>Verifies the RS256 signature of a VC-JWT against this issuer's key pair. Does not
+    /// check expiry or revocation — callers combine this with the payload's exp claim and a
+    /// repository lookup (T-WAL-2, verification/presentation flow, §5.6).</summary>
+    bool VerifyIssuerSignature(string jwt);
 }

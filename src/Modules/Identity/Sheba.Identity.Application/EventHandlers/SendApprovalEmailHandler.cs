@@ -8,15 +8,13 @@ namespace Sheba.Identity.Application.EventHandlers;
 
 /// <summary>
 /// Handles IdentityRequestDecidedEvent when Approved = true.
-/// Sends a "welcome, your account is now active" email to the citizen.
-///
-/// Uses IIdentityRepository to look up the account email.
-/// Uses IEmailService (registered by NotificationModule) to dispatch the email.
-/// No direct DbContext — fully decoupled from EF Core.
+/// Sends a bilingual "welcome, your account is now active" email to the citizen using
+/// the NotificationTemplate seeded by the Notification module (T-NOT-1).
 /// </summary>
 public sealed class SendApprovalEmailHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    INotificationTemplateService templateService,
     IInboxGuard inboxGuard,
     ILogger<SendApprovalEmailHandler> logger
 ) : INotificationHandler<IdentityRequestDecidedEvent>
@@ -25,12 +23,9 @@ public sealed class SendApprovalEmailHandler(
 
     public async Task Handle(IdentityRequestDecidedEvent notification, CancellationToken cancellationToken)
     {
-        // Only handle approved decisions
         if (!notification.Approved)
             return;
 
-        // Guarded by IInboxGuard (T-EVT-1): at-least-once outbox redelivery would otherwise
-        // resend this approval email.
         if (await inboxGuard.IsProcessedAsync(notification.EventId, ConsumerName, cancellationToken))
             return;
 
@@ -51,31 +46,20 @@ public sealed class SendApprovalEmailHandler(
             return;
         }
 
-        var htmlBody =
-            $"""
-            <h2>Welcome to Sheba Digital Services!</h2>
-            <p>Dear citizen,</p>
-            <p>Your identity verification request has been <strong>approved</strong>.</p>
-            <p>You can now log in and access all Sheba e-Government services.</p>
-            <p>Account ID: {notification.AccountId}</p>
-            <hr/>
-            <p style="color:#888;font-size:12px;">
-              This is an automated message from the Sheba Identity Platform.
-              Please do not reply to this email.
-            </p>
-            """;
-
-        var textBody =
-            $"Your Sheba identity verification has been approved. " +
-            $"You can now log in and access all e-Government services. " +
-            $"Account ID: {notification.AccountId}";
+        var rendered = await templateService.RenderAsync(
+            WellKnownTemplateKeys.IdentityRequestApproved,
+            new Dictionary<string, string>
+            {
+                ["AccountId"] = notification.AccountId.ToString()
+            },
+            cancellationToken);
 
         var sent = await emailService.SendAsync(
-            toAddress:   account.Email,
-            toName:      account.FullNameEn ?? account.FullNameAr ?? "Citizen",
-            subject:     "✅ Your Sheba account is now active",
-            htmlBody:    htmlBody,
-            textBody:    textBody,
+            toAddress:         account.Email,
+            toName:            account.FullNameEn ?? account.FullNameAr ?? "Citizen",
+            subject:           rendered.Subject,
+            htmlBody:          rendered.HtmlBody,
+            textBody:          rendered.TextBody,
             cancellationToken: cancellationToken);
 
         if (sent)

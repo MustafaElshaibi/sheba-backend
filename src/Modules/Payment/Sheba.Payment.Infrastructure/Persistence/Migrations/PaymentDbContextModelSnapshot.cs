@@ -67,6 +67,14 @@ namespace Sheba.Payment.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("payment_url");
 
+                    b.Property<string>("RefundReference")
+                        .HasColumnType("text")
+                        .HasColumnName("refund_reference");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refunded_at");
+
                     b.Property<Guid>("ServiceRequestId")
                         .HasColumnType("uuid")
                         .HasColumnName("service_request_id");
@@ -91,6 +99,49 @@ namespace Sheba.Payment.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("payment_orders", "payment");
+                });
+
+            modelBuilder.Entity("Sheba.Payment.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("GatewayResponse")
+                        .HasColumnType("text")
+                        .HasColumnName("gateway_response");
+
+                    b.Property<Guid>("PaymentOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_order_id");
+
+                    b.Property<bool>("Succeeded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("succeeded");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("transaction_type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentOrderId");
+
+                    b.ToTable("payment_transactions", "payment");
                 });
 
             modelBuilder.Entity("Sheba.Shared.Kernel.Outbox.InboxMessage", b =>

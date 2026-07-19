@@ -66,7 +66,30 @@ public sealed class AdminAnalyticsRepository(AdminDbContext db) : IAdminAnalytic
             .OrderBy(s => s.Date)
             .ToListAsync(ct);
 
+    // ── Revenue Snapshots ─────────────────────────────────────────────────────
+
+    public async Task<DailyRevenueSnapshot> GetOrCreateRevenueSnapshotAsync(
+        DateOnly date, string currency, CancellationToken ct = default)
+    {
+        var snapshot = await db.DailyRevenueSnapshots
+            .FirstOrDefaultAsync(s => s.Date == date && s.Currency == currency, ct);
+
+        if (snapshot is not null) return snapshot;
+
+        snapshot = DailyRevenueSnapshot.Create(date, currency);
+        await db.DailyRevenueSnapshots.AddAsync(snapshot, ct);
+        return snapshot;
+    }
+
     // ── Aggregated Queries ──────────────────────────────────────────────────
+
+    public async Task<decimal> GetTodayRevenueAsync(string currency = "YER", CancellationToken ct = default)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var snapshot = await db.DailyRevenueSnapshots
+            .FirstOrDefaultAsync(s => s.Date == today && s.Currency == currency, ct);
+        return snapshot?.TotalAmount ?? 0;
+    }
 
     public async Task<int> GetTodayCompletionsAsync(Guid? ministryId = null, CancellationToken ct = default)
     {

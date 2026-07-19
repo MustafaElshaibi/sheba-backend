@@ -77,13 +77,14 @@ replay attempts rejected.
 
 ## Phase 3 — Money & credentials
 
-- **T-PAY-1** Payment application layer: CreateOrder / ConfirmPayment / Refund commands,
+- ~~**T-PAY-1** Payment application layer: CreateOrder / ConfirmPayment / Refund commands,
   `PaymentCompletedEvent` consumed by the workflow (replaces direct `MarkPaymentComplete`
-  coupling), `IPaymentGateway` seam with mock gateway.
-- Wallet: VC verification + presentation endpoints; revocation-status API.
-- **T-NOT-1** Bilingual notification templates + template-keyed sends.
+  coupling), `IPaymentGateway` seam with mock gateway.~~ Done.
+- ~~**T-WAL-2** Wallet: VC verification + presentation endpoints; revocation-status API.~~ Done.
+- ~~**T-NOT-1** Bilingual notification templates + template-keyed sends.~~ Done.
+- ~~**T-WAL-1** Persistent VC issuer key — fail fast at startup in non-Development.~~ Done.
 
-**Exit:** paid service completes end-to-end on events alone; a third party can verify a Sheba VC.
+**Exit:** paid service completes end-to-end on events alone; a third party can verify a Sheba VC; bilingual emails rendered from DB templates; production startup rejects missing signing key ✅.
 
 ## Phase 4 — Audit, tests & scale-readiness
 

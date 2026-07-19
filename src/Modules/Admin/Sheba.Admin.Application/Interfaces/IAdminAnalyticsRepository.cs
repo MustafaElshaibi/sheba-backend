@@ -18,6 +18,9 @@ public interface IAdminAnalyticsRepository
     Task<DailyServiceRequestSnapshot> GetOrCreateServiceRequestSnapshotAsync(DateOnly date, Guid serviceId, Guid ministryId, CancellationToken ct = default);
     Task<List<DailyServiceRequestSnapshot>> GetServiceRequestSnapshotsAsync(DateOnly from, DateOnly to, Guid? ministryId = null, CancellationToken ct = default);
 
+    // ── Revenue Snapshots ─────────────────────────────────────────────────────
+    Task<DailyRevenueSnapshot> GetOrCreateRevenueSnapshotAsync(DateOnly date, string currency, CancellationToken ct = default);
+
     // ── Aggregated Queries ──────────────────────────────────────────────────
     // ministryId narrows service-request-based numbers (DailyServiceRequestSnapshot carries
     // MinistryId); null means unrestricted (SuperAdmin/Auditor). Registration-based numbers
@@ -26,6 +29,9 @@ public interface IAdminAnalyticsRepository
     Task<int> GetTodayCompletionsAsync(Guid? ministryId = null, CancellationToken ct = default);
     Task<decimal> GetAvgApprovalHoursLast30DaysAsync(CancellationToken ct = default);
     Task<int> GetSlaBreachCountLast30DaysAsync(Guid? ministryId = null, CancellationToken ct = default);
+    /// <summary>Today's total completed-payment revenue in the given currency (default YER — the
+    /// only currency service fees use today).</summary>
+    Task<decimal> GetTodayRevenueAsync(string currency = "YER", CancellationToken ct = default);
 
     // ── Report Jobs ──────────────────────────────────────────────────────────
     Task<ReportJob> AddReportJobAsync(ReportJob job, CancellationToken ct = default);

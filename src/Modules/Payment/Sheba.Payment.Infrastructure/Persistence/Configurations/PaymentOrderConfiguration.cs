@@ -22,6 +22,8 @@ internal sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payme
         b.Property(e => e.PaymentUrl).HasColumnName("payment_url");
         b.Property(e => e.PaidAt).HasColumnName("paid_at");
         b.Property(e => e.GatewayReference).HasColumnName("gateway_reference");
+        b.Property(e => e.RefundedAt).HasColumnName("refunded_at");
+        b.Property(e => e.RefundReference).HasColumnName("refund_reference");
         b.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
         b.Property(e => e.UpdatedAt).HasColumnName("updated_at").IsRequired();
         b.Ignore(e => e.DomainEvents);

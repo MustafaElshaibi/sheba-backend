@@ -8,15 +8,13 @@ namespace Sheba.Identity.Application.EventHandlers;
 
 /// <summary>
 /// Handles IdentityRequestDecidedEvent when Approved = false.
-/// Sends a rejection notification email to the citizen.
-///
-/// Uses IIdentityRepository to look up the account email.
-/// Uses IEmailService (registered by NotificationModule) to dispatch the email.
-/// No direct DbContext — fully decoupled from EF Core.
+/// Sends a bilingual rejection notification email to the citizen using the
+/// NotificationTemplate seeded by the Notification module (T-NOT-1).
 /// </summary>
 public sealed class SendRejectionEmailHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    INotificationTemplateService templateService,
     IInboxGuard inboxGuard,
     ILogger<SendRejectionEmailHandler> logger
 ) : INotificationHandler<IdentityRequestDecidedEvent>
@@ -25,12 +23,9 @@ public sealed class SendRejectionEmailHandler(
 
     public async Task Handle(IdentityRequestDecidedEvent notification, CancellationToken cancellationToken)
     {
-        // Only handle rejections
         if (notification.Approved)
             return;
 
-        // Guarded by IInboxGuard (T-EVT-1): at-least-once outbox redelivery would otherwise
-        // resend this rejection email.
         if (await inboxGuard.IsProcessedAsync(notification.EventId, ConsumerName, cancellationToken))
             return;
 
@@ -51,36 +46,24 @@ public sealed class SendRejectionEmailHandler(
             return;
         }
 
-        // Decide whether to include the reason (some reasons are internal-only)
-        var citizenReason = notification.RejectionReason is not null
-            ? $"<p><strong>Reason:</strong> {System.Net.WebUtility.HtmlEncode(notification.RejectionReason)}</p>"
-            : "<p>If you believe this is an error, please contact support.</p>";
+        var reasonText = notification.RejectionReason ?? "Please contact support.";
+        var reasonHtml = System.Net.WebUtility.HtmlEncode(reasonText);
 
-        var htmlBody =
-            $"""
-            <h2>Identity Verification Update</h2>
-            <p>Dear citizen,</p>
-            <p>We regret to inform you that your identity verification request has <strong>not been approved</strong>.</p>
-            {citizenReason}
-            <p>You may submit a new request after correcting the identified issues.</p>
-            <p>For assistance, contact <a href="mailto:support@sheba.gov">support@sheba.gov</a>.</p>
-            <hr/>
-            <p style="color:#888;font-size:12px;">
-              This is an automated message from the Sheba Identity Platform.
-              Please do not reply to this email.
-            </p>
-            """;
-
-        var textBody =
-            "Your Sheba identity verification request was not approved. " +
-            (notification.RejectionReason ?? "Please contact support for details.");
+        var rendered = await templateService.RenderAsync(
+            WellKnownTemplateKeys.IdentityRequestRejected,
+            new Dictionary<string, string>
+            {
+                ["ReasonHtml"] = reasonHtml,
+                ["ReasonText"] = reasonText
+            },
+            cancellationToken);
 
         var sent = await emailService.SendAsync(
-            toAddress:   account.Email,
-            toName:      account.FullNameEn ?? account.FullNameAr ?? "Citizen",
-            subject:     "❌ Sheba identity verification — action required",
-            htmlBody:    htmlBody,
-            textBody:    textBody,
+            toAddress:         account.Email,
+            toName:            account.FullNameEn ?? account.FullNameAr ?? "Citizen",
+            subject:           rendered.Subject,
+            htmlBody:          rendered.HtmlBody,
+            textBody:          rendered.TextBody,
             cancellationToken: cancellationToken);
 
         if (sent)

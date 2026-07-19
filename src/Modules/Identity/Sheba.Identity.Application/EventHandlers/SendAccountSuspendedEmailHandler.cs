@@ -8,10 +8,12 @@ namespace Sheba.Identity.Application.EventHandlers;
 
 /// <summary>
 /// Notifies the citizen by email when an admin places a security hold on their account.
+/// Sends a bilingual email using the AccountSuspended template (T-NOT-1).
 /// </summary>
 public sealed class SendAccountSuspendedEmailHandler(
     IIdentityRepository repository,
     IEmailService emailService,
+    INotificationTemplateService templateService,
     IInboxGuard inboxGuard,
     ILogger<SendAccountSuspendedEmailHandler> logger
 ) : INotificationHandler<AccountSuspendedEvent>
@@ -27,23 +29,22 @@ public sealed class SendAccountSuspendedEmailHandler(
         if (account is null || string.IsNullOrWhiteSpace(account.Email))
             return;
 
-        var reasonHtml = notification.Reason is not null
-            ? $"<p><strong>Reason:</strong> {System.Net.WebUtility.HtmlEncode(notification.Reason)}</p>"
-            : "<p>Contact support for details.</p>";
+        var reasonText = notification.Reason ?? "Contact support for details.";
+        var rendered = await templateService.RenderAsync(
+            WellKnownTemplateKeys.AccountSuspended,
+            new Dictionary<string, string>
+            {
+                ["ReasonHtml"] = System.Net.WebUtility.HtmlEncode(reasonText),
+                ["ReasonText"] = reasonText
+            },
+            cancellationToken);
 
         var sent = await emailService.SendAsync(
-            toAddress:  account.Email,
-            toName:     account.FullNameEn ?? account.FullNameAr ?? "Citizen",
-            subject:    "⚠️ Sheba account suspended",
-            htmlBody:
-                $"""
-                <h2>Account Suspended</h2>
-                <p>Dear citizen,</p>
-                <p>Your Sheba account has been <strong>suspended</strong> and you will not be able to log in until it is reinstated.</p>
-                {reasonHtml}
-                <p>For assistance, contact <a href="mailto:support@sheba.gov">support@sheba.gov</a>.</p>
-                """,
-            textBody:   "Your Sheba account has been suspended. " + (notification.Reason ?? "Contact support for details."),
+            toAddress:         account.Email,
+            toName:            account.FullNameEn ?? account.FullNameAr ?? "Citizen",
+            subject:           rendered.Subject,
+            htmlBody:          rendered.HtmlBody,
+            textBody:          rendered.TextBody,
             cancellationToken: cancellationToken);
 
         if (sent)

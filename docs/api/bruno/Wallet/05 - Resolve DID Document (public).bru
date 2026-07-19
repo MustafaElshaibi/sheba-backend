@@ -1,0 +1,17 @@
+meta {
+  name: Resolve DID Document (public)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/wallet/did/did:sheba:issuer
+  body: none
+  auth: none
+}
+
+docs {
+  Public (AllowAnonymous) — T-WAL-2, BR-WA-2. Resolves did:sheba:issuer or
+  did:sheba:citizen:{id} to its RSA public key (PEM), so a verifier can independently check a
+  VC-JWT's signature.
+}
